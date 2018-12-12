@@ -1,0 +1,11 @@
+[package]
+name = "glwindow"
+version = "0.1.0"
+authors = ["arc"]
+edition = "2018"
+
+[dependencies]
+glutin = "*"
+gl = "*"
+rand = "*"
+scoped_threadpool = "*"
