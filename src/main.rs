@@ -16,6 +16,9 @@ use crate::math::*;
 mod shader;
 use crate::shader::*;
 
+mod glapi;
+use crate::glapi::*;
+
 mod context;
 use crate::context::*;
 
@@ -24,10 +27,6 @@ use crate::rect::*;
 
 mod button;
 use crate::button::*;
-
-static instance_props: [f32; 2] = [
-    0.0, 0.0
-];
 
 struct App{
     draw:Draw,
@@ -38,14 +37,17 @@ impl Style for App{
     fn style(cx:&mut Cx)->Self{
         Self{
             draw:Draw{..Default::default()},
-            ok_button:Button{..Style::style(cx)}
+            ok_button:Button{
+                ..Style::style(cx)
+            }
         }
     }
 }
 
 impl App{
-    fn handle(&mut self, ev:&Ev){
+    fn handle(&mut self, cx:&mut Cx, ev:&Ev){
         if self.ok_button.handle_click(ev){
+            //
         }
     }
 
@@ -58,48 +60,23 @@ impl App{
     }
 }
 
-const VS_SRC: &'static [u8] = b"
-#version 100
-precision mediump float;
-
-uniform mat4 projection;
-uniform mat4 camera;
-uniform float mode;
-
-attribute vec3 position;
-attribute vec2 disp;
-varying vec3 color;
-
-void main() {
-    mat4 total = projection * camera;
-    gl_Position =  total * vec4(position, 1.);
-
-    color = position*vec3(0.5) + vec3(0.5);
-    if(mode>0.5) color = vec3(1.0,1.0,1.0);
-}
-\0";
-
-const FS_SRC: &[u8] = b"
-#version 100
-precision mediump float;
-varying vec3 color;
-void main() {
-    // do a screenspace normal
-
-    gl_FragColor = vec4(color,1.0);//vec4(0.1,0.4,0.6,1.0);
-}
-
-\0";
-
 fn main() {
-    let mut cx = Cx::new();
+    let mut cx = Cx{
+        glapi:GLApi::new("Hello World"),
+        ..Default::default()
+    };
 
     let mut app = App{
         ..Style::style(&mut cx)
     };
 
-    let mut load_vertices = Vec::new();
-    let mut load_indices = Vec::new();
+    GLApi::event_loop(&mut cx, |cx, ev|{
+        app.handle(&mut cx, &ev);
+        app.draw(&mut cx);
+    })
+        
+    //let mut load_vertices = Vec::new();
+    //let mut load_indices = Vec::new();
     // read OBJ file
     /*
     let f = File::open("test.obj").unwrap();
@@ -119,7 +96,7 @@ fn main() {
             load_vertices.push(split[3].parse::<f32>().unwrap());
         }
     }*/
-
+/*
     let mut events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new()
         .with_title("Hello, world")
@@ -273,6 +250,6 @@ fn main() {
         }
 
         gl_window.swap_buffers().unwrap();
-
-    }
+        */
+    //}
 }

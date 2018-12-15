@@ -28,21 +28,14 @@ impl Style for Rect{
     }
 }
 
-struct RectShaderInst{
-    x:f32,
-    y:f32,
-    w:f32,
-    h:f32,
-    color:Vec4
-}
-
 impl Rect{
     pub fn def_shader(sh: &mut Shader){
-        sh.inst("x",1);
-        sh.inst("y",1);
-        sh.inst("z",1);
-        sh.inst("w",1);
-        sh.inst("color",4);
+        
+        sh.float("x");
+        sh.float("y");
+        sh.float("w");
+        sh.float("h");
+        sh.vec4("color");
         sh.method(
             "vec4","pixel","()","{
                 return color;
@@ -51,8 +44,10 @@ impl Rect{
     }
 
     pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32){
-        // lets get a RectShaderInst slot in our attribute array
-        // and fill it
-
+        let mut wr = cx.instance(self.shader);
+        wr.float(x);
+        wr.float(y);
+        wr.float(self.w);
+        wr.float(self.h);
     }
 }

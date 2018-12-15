@@ -25,24 +25,34 @@ pub struct Shader{
 }
 
 impl Shader{
-    pub fn base(&mut self, name:&str, slots:u32){
+    pub fn base_float(&mut self, name:&str){
         self.base_attr.push(
             ShaderVar{
                 name:name.to_string(),
-                slots:slots
+                slots:1
             }
         );
-        self.base_slots = self.inst_slots + slots
+        self.base_slots = self.base_slots + 1
     }
     
-    pub fn inst(&mut self, name:&str, slots:u32){
+    pub fn float(&mut self, name:&str){
         self.inst_attr.push(
             ShaderVar{
                 name:name.to_string(),
-                slots:slots
+                slots:1
             }
         );
-        self.inst_slots = self.inst_slots + slots
+        self.inst_slots = self.inst_slots + 1
+    }
+    
+    pub fn vec4(&mut self, name:&str){
+        self.inst_attr.push(
+            ShaderVar{
+                name:name.to_string(),
+                slots:4
+            }
+        );
+        self.inst_slots = self.inst_slots + 4
     }
 
     pub fn method(&mut self, ret:&str, name:&str, args:&str, body:&str){
