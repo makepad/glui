@@ -14,7 +14,7 @@ pub struct Rect{
 
 impl Style for Rect{
     fn style(cx:&mut Cx)->Self{
-        let mut sh = Shader::new(); 
+        let mut sh = Shader::def(); 
         Self::def_shader(&mut sh);
         Self{
             shader:cx.add_shader(&sh),
@@ -30,24 +30,39 @@ impl Style for Rect{
 
 impl Rect{
     pub fn def_shader(sh: &mut Shader){
-        
-        sh.float("x");
-        sh.float("y");
-        sh.float("w");
-        sh.float("h");
-        sh.vec4("color");
+        sh.base("pos", Kind::Vec2);
+        sh.inst("x", Kind::Float);
+        sh.inst("y", Kind::Float);
+        sh.inst("w", Kind::Float);
+        sh.inst("h", Kind::Float);
+        sh.inst("color", Kind::Vec4);
         sh.method(
-            "vec4","pixel","()","{
+            "vec4 pixel(){
+                color2 = color;
                 return color;
+            }"
+        );
+        sh.method(
+            "vec4 vertex(){
+                call1();
+                call2();
+                return pos;
+            }"
+        );
+        sh.method(
+            "vec4 call1(){
+                call3();
+                return pos;
             }"
         );
     }
 
-    pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32){
+    pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32)->InstanceWriter{
         let mut wr = cx.instance(self.shader);
-        wr.float(x);
-        wr.float(y);
-        wr.float(self.w);
-        wr.float(self.h);
+        wr.float(cx, x);
+        wr.float(cx, y);
+        wr.float(cx, self.w);
+        wr.float(cx, self.h);
+        wr
     }
 }

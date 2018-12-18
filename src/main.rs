@@ -1,30 +1,11 @@
 extern crate gl;
 extern crate glutin;
 
-use std::ffi::CStr;
-use glutin::dpi::*;
-use glutin::GlContext;
-use std::mem;
-use std::ptr;
-use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
-
 mod math;
-use crate::math::*;
-
 mod shader;
-use crate::shader::*;
-
-mod glapi;
-use crate::glapi::*;
-
 mod context;
 use crate::context::*;
-
 mod rect;
-use crate::rect::*;
-
 mod button;
 use crate::button::*;
 
@@ -46,7 +27,7 @@ impl Style for App{
 
 impl App{
     fn handle(&mut self, cx:&mut Cx, ev:&Ev){
-        if self.ok_button.handle_click(ev){
+        if self.ok_button.handle_click(cx, ev){
             //
         }
     }
@@ -62,7 +43,8 @@ impl App{
 
 fn main() {
     let mut cx = Cx{
-        glapi:GLApi::new("Hello World"),
+        running:true,
+        title:"Hello World".to_string(),
         ..Default::default()
     };
 
@@ -70,11 +52,15 @@ fn main() {
         ..Style::style(&mut cx)
     };
 
-    GLApi::event_loop(&mut cx, |cx, ev|{
-        app.handle(&mut cx, &ev);
-        app.draw(&mut cx);
-    })
-        
+    cx.compile_all_shaders();
+
+    cx.event_loop(|cx, ev|{
+        if let Ev::Redraw = ev{
+            return app.draw(cx);
+        }
+        app.handle(cx, &ev);
+    });
+ 
     //let mut load_vertices = Vec::new();
     //let mut load_indices = Vec::new();
     // read OBJ file

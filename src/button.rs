@@ -1,5 +1,5 @@
-use crate::math::*;
-use crate::shader::*;
+//use crate::math::*;
+//use crate::shader::*;
 use crate::context::*;
 use crate::rect::*;
 
@@ -22,12 +22,12 @@ impl Style for Button{
 }
 
 impl Button{
-    pub fn handle(&mut self, ev:&Ev){
+    pub fn handle(&mut self, _cx:&mut Cx, _ev:&Ev){
         // handle event and figure out if we got clicked
     }
 
-    pub fn handle_click(&mut self, ev:&Ev)->bool{
-        self.handle(ev);
+    pub fn handle_click(&mut self, cx:&mut Cx, ev:&Ev)->bool{
+        self.handle(cx,ev);
         self.did_click()
     }
 
@@ -35,7 +35,7 @@ impl Button{
         self.did_click
     }
 
-    pub fn draw_with_label(&mut self, cx:&mut Cx, label: &str){
+    pub fn draw_with_label(&mut self, cx:&mut Cx, _label: &str){
         self.draw.begin(cx);
 
         self.bg.draw_at(cx, 0.0, 0.0);
