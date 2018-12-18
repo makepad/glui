@@ -184,7 +184,7 @@ impl Shader{
         r
     }
 
-    fn attrib_unpack(base: &str, slot:usize, sv:&ShaderVar)->String{
+    fn attrib_unpack(base: &str, slot:usize, total_slots:usize,sv:&ShaderVar)->String{
         let mut r = "".to_string();
         // ok we have the slot we start at
         r.push_str("    ");
@@ -194,9 +194,34 @@ impl Shader{
         r.push_str("(");        
         // now we need to grab it from the slots
         for i in 0..sv.kind.slots(){
+            if i != 0{
+                r.push_str(base)
+            }
             // now we need to read .x/y/z/w
-            r.push_str(base)
-            
+            // ok we are iterating i from 0 to slots.
+            // we also have the slot we start in
+            // and the total number of slots
+            // so first of all we need the slot we are in
+            let id = (slot+i)>>2;
+            let ext = (slot+i)&3;
+            // now lets check which prop we need
+            // if 0, .x , 1. .y, 2. .z, 3, .w
+            r.push_str(&id.to_string());
+            r.push_str(
+                match ext{
+                    0=>{
+                        if(total_slots&3 == 1){
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
         }
         r
     }
@@ -233,7 +258,7 @@ impl Shader{
         let mut slot_id = 0;
         for attr in &self.base_attr{
             vtx_final.push_str(&attr.gl_def());
-            vtx_main.push_str( &Shader::attrib_unpack("baseattr", slot_id, attr));
+            vtx_main.push_str( &Shader::attrib_unpack("baseattr", slot_id, base_slots, attr));
             slot_id = slot_id + attr.kind.slots();
         }
 
@@ -241,7 +266,7 @@ impl Shader{
         let mut slot_id = 0;
         for attr in &self.inst_attr{
             vtx_final.push_str(&attr.gl_def());
-            vtx_main.push_str( &Shader::attrib_unpack("instattr", slot_id, attr));
+            vtx_main.push_str( &Shader::attrib_unpack("instattr", slot_id, inst_slots, attr));
             slot_id = slot_id + attr.kind.slots();
         }
 
