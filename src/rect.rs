@@ -30,12 +30,14 @@ impl Style for Rect{
 
 impl Rect{
     pub fn def_shader(sh: &mut Shader){
-        sh.base("pos", Kind::Vec2);
-        sh.inst("x", Kind::Float);
-        sh.inst("y", Kind::Float);
-        sh.inst("w", Kind::Float);
-        sh.inst("h", Kind::Float);
-        sh.inst("color", Kind::Vec4);
+        sh.geometry("pos", Kind::Vec2);
+        sh.instance("x", Kind::Float);
+        sh.instance("y", Kind::Float);
+        sh.instance("w", Kind::Float);
+        sh.instance("h", Kind::Float);
+        sh.instance("color", Kind::Vec4);
+        sh.varying("x", Kind::Float);
+        sh.varying("color", Kind::Vec4);
         sh.method(
             "vec4 pixel(){
                 color2 = color;

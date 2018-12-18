@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone,PartialEq)]
 pub enum Kind{
     Float,
     Vec2,
@@ -64,16 +64,16 @@ pub struct CompiledShader{
 
 #[derive(Default,Clone)]
 pub struct Shader{
-    pub base_attr:Vec<ShaderVar>,
-    pub inst_attr:Vec<ShaderVar>,
+    pub geometries:Vec<ShaderVar>,
+    pub instancing:Vec<ShaderVar>,
     pub varyings:Vec<ShaderVar>,
     pub uniforms:Vec<ShaderVar>,
     pub methods:Vec<String>
 }
 
 impl Shader{
-    pub fn base(&mut self, name:&str, kind:Kind){
-        self.base_attr.push(
+    pub fn geometry(&mut self, name:&str, kind:Kind){
+        self.geometries.push(
             ShaderVar{
                 name:name.to_string(),
                 kind:kind
@@ -81,8 +81,8 @@ impl Shader{
         );
     }
     
-    pub fn inst(&mut self, name:&str, kind:Kind){
-        self.inst_attr.push(
+    pub fn instance(&mut self, name:&str, kind:Kind){
+        self.instancing.push(
             ShaderVar{
                 name:name.to_string(),
                 kind:kind
@@ -155,7 +155,7 @@ impl Shader{
         r
     }
 
-    fn attrib_type(i:usize, total:usize, left:usize)->String{
+    fn variable_type(i:usize, total:usize, left:usize)->String{
         if i == total - 1{
             match left{
                 0...1=>"float",
@@ -169,13 +169,14 @@ impl Shader{
         }
     }
 
-    fn attrib_def(base: &str, slots:usize)->String{
+    fn variable_def(thing: &str, base: &str, slots:usize)->String{
         // ok lets do a ceil
         let mut r = "".to_string();
         let total = Shader::ceil_div4(slots);
         for i in 0..total{
-            r.push_str("attribute ");
-            r.push_str(&Shader::attrib_type(i, total, slots&3));
+            r.push_str(thing);
+            r.push_str(" ");
+            r.push_str(&Shader::variable_type(i, total, slots&3));
             r.push_str(" ");
             r.push_str(base);
             r.push_str(&i.to_string());
@@ -184,33 +185,94 @@ impl Shader{
         r
     }
 
-    fn attrib_unpack(base: &str, slot:usize, total_slots:usize,sv:&ShaderVar)->String{
+    fn variable_exist_check(sv:&ShaderVar, list:&Vec<ShaderVar>)->bool{
+        for svl in list{
+            if svl.name == sv.name{
+                if svl.kind != sv.kind{
+                    panic!()
+                }
+                return true
+            }
+        }
+        false
+    }
+
+    fn variable_unpack(base: &str, slot:usize, total_slots:usize,sv:&ShaderVar)->String{
         let mut r = "".to_string();
         // ok we have the slot we start at
         r.push_str("    ");
         r.push_str(&sv.name);
         r.push_str("=");
-        r.push_str(&sv.kind.name());
-        r.push_str("(");        
-        // now we need to grab it from the slots
+        let id = (slot)>>2;
+
+        // just splat directly
+        if sv.kind == Kind::Vec2{
+            match slot&3{
+                0=>{
+                    r.push_str(base);
+                    r.push_str(&id.to_string());
+                    r.push_str(".xy;\r\n");
+                    return r
+                }
+                1=>{
+                    r.push_str(base);
+                    r.push_str(&id.to_string());
+                    r.push_str(".yz;\r\n");
+                    return r
+                }            
+                2=>{
+                    r.push_str(base);
+                    r.push_str(&id.to_string());
+                    r.push_str(".zw;\r\n");
+                    return r
+                }
+                _=>()            
+            }
+        }
+        if sv.kind == Kind::Vec3{
+            match slot&3{
+                0=>{
+                    r.push_str(base);
+                    r.push_str(&id.to_string());
+                    r.push_str(".xyz;\r\n");
+                    return r
+                }
+                1=>{
+                    r.push_str(base);
+                    r.push_str(&id.to_string());
+                    r.push_str(".yzw;\r\n");
+                    return r
+                }            
+                _=>()            
+            }
+        }        
+        if sv.kind == Kind::Vec4{
+            if slot&3 == 0{
+                r.push_str(base);
+                r.push_str(&id.to_string());
+                r.push_str(".xyzw;\r\n");
+                return r
+            }
+        }          
+        if sv.kind != Kind::Float{
+            r.push_str(&sv.kind.name());
+            r.push_str("(");       
+        } 
+        // splat via loose props
         for i in 0..sv.kind.slots(){
             if i != 0{
-                r.push_str(base)
+                r.push_str(", ");
             }
-            // now we need to read .x/y/z/w
-            // ok we are iterating i from 0 to slots.
-            // we also have the slot we start in
-            // and the total number of slots
-            // so first of all we need the slot we are in
+            r.push_str(base);
+
             let id = (slot+i)>>2;
             let ext = (slot+i)&3;
-            // now lets check which prop we need
-            // if 0, .x , 1. .y, 2. .z, 3, .w
+
             r.push_str(&id.to_string());
             r.push_str(
                 match ext{
                     0=>{
-                        if(total_slots&3 == 1){
+                        if (id == total_slots>>2) && total_slots&3 == 1{
                             ""
                         }
                         else{
@@ -222,6 +284,105 @@ impl Shader{
                     _=>".w"
                 }
             );
+        }
+        if sv.kind != Kind::Float{
+            r.push_str(")");
+        }
+        r.push_str(";\n");
+        r
+    }
+
+    fn variable_pack_chunk(r: &mut String, base: &str, id:usize, chunk:&str, sv:&ShaderVar){
+        r.push_str("    ");
+        r.push_str(base);
+        r.push_str(&id.to_string());
+        r.push_str(chunk);
+        r.push_str(&sv.name);
+        r.push_str(";\n");
+    }
+
+    fn variable_pack(base: &str, slot:usize, total_slots:usize,sv:&ShaderVar)->String{
+        // now we go the other way. we take slot and assign ShaderVar into it
+        let mut r = "".to_string();
+        let id = (slot)>>2;
+
+        // just splat directly
+        if sv.kind == Kind::Vec2{
+            match slot&3{
+                0=>{
+                    Shader::variable_pack_chunk(&mut r, base, id, ".xy =", &sv);
+                    return r
+                }
+                1=>{
+                    Shader::variable_pack_chunk(&mut r, base, id, ".yz =", &sv);
+                    return r
+                }            
+                2=>{
+                    Shader::variable_pack_chunk(&mut r, base, id, ".zw =", &sv);
+                    return r
+                }
+                _=>()            
+            }
+        }
+        if sv.kind == Kind::Vec3{
+            match slot&3{
+                0=>{
+                    Shader::variable_pack_chunk(&mut r, base, id, ".xyz =", &sv);
+                    return r
+                }
+                1=>{
+                    Shader::variable_pack_chunk(&mut r, base, id, ".yzw =", &sv);
+                    return r
+                }            
+                _=>()            
+            }
+        }        
+        if sv.kind == Kind::Vec4{
+            if slot&3 == 0{
+                Shader::variable_pack_chunk(&mut r, base, id, ".xyzw =", &sv);
+                return r
+            }
+        }          
+        // splat via loose props
+        for i in 0..sv.kind.slots(){
+            r.push_str("    ");
+            r.push_str(base);
+            let id = (slot+i)>>2;
+            let ext = (slot+i)&3;
+            r.push_str(&id.to_string());
+            r.push_str(
+                match ext{
+                    0=>{
+                        if (id == total_slots>>2) && total_slots&3 == 1{ // we are at last slot
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
+            r.push_str(" = ");
+            r.push_str(&sv.name);
+            r.push_str(
+                match i{
+                    0=>{
+                        if sv.kind.slots() == 1{
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
+            r.push_str(";\r\n");
         }
         r
     }
@@ -243,32 +404,67 @@ impl Shader{
         let mut pix_final = "".to_string();
 
         // count slots
-        let base_slots:usize = self.base_attr.iter().map(|v| v.kind.slots()).sum();
-        let inst_slots:usize = self.inst_attr.iter().map(|v| v.kind.slots()).sum();
+        let geom_slots:usize = self.geometries.iter().map(|v| v.kind.slots()).sum();
+        let inst_slots:usize = self.instancing.iter().map(|v| v.kind.slots()).sum();
+        let vary_slots:usize = self.varyings.iter().map(|v| v.kind.slots()).sum();
       
-        vtx_final.push_str("\n// Base attributes\n");
-        vtx_final.push_str(&Shader::attrib_def("baseattr", base_slots));
+        vtx_final.push_str("\n// Geometry attributes\n");
+        vtx_final.push_str(&Shader::variable_def("attribute", "geomattr", geom_slots));
   
         vtx_final.push_str("\n// Instance attributes\n");
-        vtx_final.push_str(&Shader::attrib_def("instattr", inst_slots));
+        vtx_final.push_str(&Shader::variable_def("attribute", "instattr", inst_slots));
+      
+        pix_final.push_str("\n// Varyings\n");
+        pix_final.push_str(&Shader::variable_def("varying", "varying", vary_slots));
+        
+        vtx_final.push_str("\n// Varyings\n");
+        vtx_final.push_str(&Shader::variable_def("varying", "varying", vary_slots));
        
         let mut vtx_main = "vec4 main(){\n".to_string();
+        let mut pix_main = "vec4 main(){\n".to_string();
 
-        vtx_final.push_str("\n// Base attributes local names\n");
+        vtx_final.push_str("\n// Geometry attributes local names\n");
+        vtx_main.push_str("\n    // Geometry unpacking\n");
         let mut slot_id = 0;
-        for attr in &self.base_attr{
-            vtx_final.push_str(&attr.gl_def());
-            vtx_main.push_str( &Shader::attrib_unpack("baseattr", slot_id, base_slots, attr));
-            slot_id = slot_id + attr.kind.slots();
+        for var in &self.geometries{
+            vtx_final.push_str(&var.gl_def());
+            vtx_main.push_str( &Shader::variable_unpack("geomattr", slot_id, geom_slots, var));
+            slot_id = slot_id + var.kind.slots();
         }
 
         vtx_final.push_str("\n// Instance attributes local names\n");
+        vtx_main.push_str("\n    // Instance unpacking\n");
         let mut slot_id = 0;
-        for attr in &self.inst_attr{
-            vtx_final.push_str(&attr.gl_def());
-            vtx_main.push_str( &Shader::attrib_unpack("instattr", slot_id, inst_slots, attr));
-            slot_id = slot_id + attr.kind.slots();
+        for var in &self.instancing{
+            vtx_final.push_str(&var.gl_def());
+            vtx_main.push_str( &Shader::variable_unpack("instattr", slot_id, inst_slots, var));
+            slot_id = slot_id + var.kind.slots();
         }
+
+        vtx_final.push_str("\n// Varyings local names\n");
+        pix_final.push_str("\n// Varyings local names\n");
+        pix_main.push_str("\n    // Varying unpacking\n");
+        vtx_main.push_str("\n    gl_Position = vertex();\n");
+        vtx_main.push_str("\n    // Varying packing\n");
+        let mut slot_id = 0;
+        for var in &self.varyings{
+            // if it already exists, we'll use its local name 
+            if !Shader::variable_exist_check(var, &self.geometries) &&
+               !Shader::variable_exist_check(var, &self.instancing)  {
+                vtx_final.push_str(&var.gl_def());
+            }  
+            // pack it in the vertexshader
+            vtx_main.push_str( &Shader::variable_pack("varying", slot_id, vary_slots, var));
+
+            // define in pixelshader
+            pix_final.push_str(&var.gl_def());
+            // unpack it
+            pix_main.push_str( &Shader::variable_unpack("varying", slot_id, vary_slots, var));
+            slot_id = slot_id + var.kind.slots();
+        }
+        pix_main.push_str("\n    gl_FragColor = pixel();\n");
+        vtx_main.push_str("\n}\n");
+        pix_main.push_str("\n}\n");
 
         vtx_final.push_str("\n// Methods\n");
 
@@ -280,8 +476,13 @@ impl Shader{
             &self.combine_deps(&pix_deps)
         );
 
+        vtx_final.push_str(&vtx_main);
+
+        pix_final.push_str(&pix_main);
         // push the main functions
-        println!("Vertex {}",  vtx_final);
+        println!("---------- Vertex Shader ------- {}",  vtx_final);
+        // push the main functions
+        println!("---------- Pixel Shader --------- {}",  pix_final);
         
         CompiledShader{..Default::default()}
     }
