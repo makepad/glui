@@ -153,53 +153,53 @@ impl Cx{
         }
     }
 
-    pub fn compile_all_shaders(&mut self){
-        for sh in &self.shaders{
-            self.shaders_gl.push(GLShader{
-                program:0 as gl::types::GLuint
-            });
-            let csh = sh.compile();
-            // now we have a pixel and a vertex shader
-            // so lets now pass it to GL
-            unsafe{
-                
-                let vs = gl::CreateShader(gl::VERTEX_SHADER);
-                gl::ShaderSource(vs, 1, [csh.vertex.as_ptr() as *const _].as_ptr(), ptr::null());
-                gl::CompileShader(vs);
-                if let Some(error) = Cx::has_shader_error(true, vs, &csh.vertex){
-                    println!(
-                        "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",
-                        error
-                    );
-                    continue
-                }
-
-                let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
-                gl::ShaderSource(fs, 1, [csh.fragment.as_ptr() as *const _].as_ptr(), ptr::null());
-                gl::CompileShader(fs);
-                if let Some(error) = Cx::has_shader_error(true, fs, &csh.fragment){
-                    println!(
-                        "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",
-                        error
-                    );
-                    continue
-                }
-
-                let program = gl::CreateProgram();
-                gl::AttachShader(program, vs);
-                gl::AttachShader(program, fs);
-                gl::LinkProgram(program);
-                if let Some(error) = Cx::has_shader_error(false, program, ""){
-                    println!(
-                        "ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",
-                        error
-                    );
-                    continue
-                }
-                gl::DeleteShader(vs);
-                gl::DeleteShader(fs);
-                self.shaders_gl.last_mut().unwrap().program = program;
+    fn compile_gl_shader(sh:&Shader)->Option<GLShader>{
+        let csh = sh.compile();
+        // now we have a pixel and a vertex shader
+        // so lets now pass it to GL
+        unsafe{
+            
+            let vs = gl::CreateShader(gl::VERTEX_SHADER);
+            gl::ShaderSource(vs, 1, [csh.vertex.as_ptr() as *const _].as_ptr(), ptr::null());
+            gl::CompileShader(vs);
+            if let Some(error) = Cx::has_shader_error(true, vs, &csh.vertex){
+                println!(
+                    "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",
+                    error
+                );
+                return None
             }
+
+            let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
+            gl::ShaderSource(fs, 1, [csh.fragment.as_ptr() as *const _].as_ptr(), ptr::null());
+            gl::CompileShader(fs);
+            if let Some(error) = Cx::has_shader_error(true, fs, &csh.fragment){
+                println!(
+                    "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",
+                    error
+                );
+                return None
+            }
+
+            let program = gl::CreateProgram();
+            gl::AttachShader(program, vs);
+            gl::AttachShader(program, fs);
+            gl::LinkProgram(program);
+            if let Some(error) = Cx::has_shader_error(false, program, ""){
+                println!(
+                    "ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",
+                    error
+                );
+                return None
+            }
+            gl::DeleteShader(vs);
+            gl::DeleteShader(fs);
+
+            return Some(GLShader{
+                program:program
+            })
+            // ok lets get the attributes
+            // and the uniforms
         }
     }
 
@@ -249,7 +249,17 @@ impl Cx{
         }
 
         // lets compile all shaders
-        self.compile_all_shaders();
+        for sh in &self.shaders{
+            let glsh = Cx::compile_gl_shader(&sh);
+            if let Some(glsh) = glsh{
+                self.shaders_gl.push(glsh);
+            }
+            else{
+                self.shaders_gl.push(
+                    GLShader{..Default::default()}
+                )
+            }
+        };
 
         while self.running == true{
             events_loop.poll_events(|event|{
