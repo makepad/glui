@@ -1,7 +1,14 @@
 use glutin::dpi::*;
 use glutin::GlContext;
+use std::mem;
+use std::ptr;
 
 use crate::shader::*;
+
+#[derive(Default,Clone)]
+pub struct GLShader{
+    program: gl::types::GLuint
+}
 
 #[derive(Default,Clone)]
 pub struct Cx{
@@ -12,7 +19,8 @@ pub struct Cx{
     pub draw_cmd_lists_free: Vec<usize>,
     pub draw_stack: Vec<Draw>,
     pub draw_cmd_list_id: usize,
-    pub frame_id: usize
+    pub frame_id: usize,
+    pub shaders_gl: Vec<GLShader>
 }
 
 pub struct InstanceWriter{
@@ -24,6 +32,30 @@ impl InstanceWriter{
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
             instance_data.push(v);
+        }
+    }
+    pub fn vec2(&mut self, cx: &mut Cx, x:f32, y:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance_data.push(x);
+            instance_data.push(y);
+        }
+    }
+    pub fn vec3(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance_data.push(x);
+            instance_data.push(y);
+            instance_data.push(z);
+        }
+    }
+    pub fn vec4(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32, w:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance_data.push(x);
+            instance_data.push(y);
+            instance_data.push(z);
+            instance_data.push(w);
         }
     }
 }
@@ -78,12 +110,96 @@ impl Cx{
         return Cx{..Default::default()}
     }
 
+    fn has_shader_error(compile:bool, shader:gl::types::GLuint, source:&str)->Option<String>{
+        unsafe{
+            let mut success = i32::from(gl::FALSE);
+           
+            if compile{
+                gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
+            }
+            else{
+                gl::GetProgramiv(shader, gl::LINK_STATUS, &mut success);
+            };
+           
+            if success != i32::from(gl::TRUE) {
+                 let mut info_log = Vec::<u8>::with_capacity(2048);
+                info_log.set_len(2047);
+                for i in 0..2047{
+                    info_log[i] = 0;
+                };
+                if compile{
+                    gl::GetShaderInfoLog(shader, 2048, ptr::null_mut(),
+                        info_log.as_mut_ptr() as *mut gl::types::GLchar)
+                }
+                else{
+                    gl::GetProgramInfoLog(shader, 2048, ptr::null_mut(),
+                        info_log.as_mut_ptr() as *mut gl::types::GLchar)
+                }
+                let mut r = "".to_string();
+                r.push_str(&String::from_utf8(info_log).unwrap());
+                r.push_str("\n");
+                let split = source.split("\n");
+                for (line,chunk) in split.enumerate(){
+                    r.push_str(&(line+1).to_string());
+                    r.push_str(":");
+                    r.push_str(chunk);
+                    r.push_str("\n");
+                }
+                Some(r)
+            }
+            else{
+                None
+            }
+        }
+    }
+
     pub fn compile_all_shaders(&mut self){
         for sh in &self.shaders{
+            self.shaders_gl.push(GLShader{
+                program:0 as gl::types::GLuint
+            });
             let csh = sh.compile();
             // now we have a pixel and a vertex shader
             // so lets now pass it to GL
-            
+            unsafe{
+                
+                let vs = gl::CreateShader(gl::VERTEX_SHADER);
+                gl::ShaderSource(vs, 1, [csh.vertex.as_ptr() as *const _].as_ptr(), ptr::null());
+                gl::CompileShader(vs);
+                if let Some(error) = Cx::has_shader_error(true, vs, &csh.vertex){
+                    println!(
+                        "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",
+                        error
+                    );
+                    continue
+                }
+
+                let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
+                gl::ShaderSource(fs, 1, [csh.fragment.as_ptr() as *const _].as_ptr(), ptr::null());
+                gl::CompileShader(fs);
+                if let Some(error) = Cx::has_shader_error(true, fs, &csh.fragment){
+                    println!(
+                        "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",
+                        error
+                    );
+                    continue
+                }
+
+                let program = gl::CreateProgram();
+                gl::AttachShader(program, vs);
+                gl::AttachShader(program, fs);
+                gl::LinkProgram(program);
+                if let Some(error) = Cx::has_shader_error(false, program, ""){
+                    println!(
+                        "ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",
+                        error
+                    );
+                    continue
+                }
+                gl::DeleteShader(vs);
+                gl::DeleteShader(fs);
+                self.shaders_gl.last_mut().unwrap().program = program;
+            }
         }
     }
 
@@ -131,6 +247,9 @@ impl Cx{
             gl_window.make_current().unwrap();
             gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
         }
+
+        // lets compile all shaders
+        self.compile_all_shaders();
 
         while self.running == true{
             events_loop.poll_events(|event|{

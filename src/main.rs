@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 extern crate gl;
 extern crate glutin;
 
@@ -51,8 +52,6 @@ fn main() {
     let mut app = App{
         ..Style::style(&mut cx)
     };
-
-    cx.compile_all_shaders();
 
     cx.event_loop(|cx, ev|{
         if let Ev::Redraw = ev{

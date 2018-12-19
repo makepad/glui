@@ -30,33 +30,34 @@ impl Style for Rect{
 
 impl Rect{
     pub fn def_shader(sh: &mut Shader){
+        // lets add the draw shader lib
+        Shader::draw_lib(sh);
+        sh.geom = vec![
+            0.0,0.0,
+            1.0,0.0,
+            1.0,1.0,
+            0.0,1.0
+        ];
+        sh.index = vec![
+            0,1,2,
+            2,3,0
+        ];
         sh.geometry("pos", Kind::Vec2);
         sh.instance("x", Kind::Float);
         sh.instance("y", Kind::Float);
         sh.instance("w", Kind::Float);
         sh.instance("h", Kind::Float);
-        sh.instance("color", Kind::Vec4);
-        sh.varying("x", Kind::Float);
-        sh.varying("color", Kind::Vec4);
-        sh.method(
-            "vec4 pixel(){
-                color2 = color;
+        sh.instancev("color", Kind::Vec4);
+        sh.method("
+            vec4 pixel(){
                 return color;
-            }"
-        );
-        sh.method(
-            "vec4 vertex(){
-                call1();
-                call2();
-                return pos;
-            }"
-        );
-        sh.method(
-            "vec4 call1(){
-                call3();
-                return pos;
-            }"
-        );
+            }
+        ");
+        sh.method("
+            vec4 vertex(){
+                return vec4(pos*vec2(w, h)+vec2(x, y),0.,1.);
+            }
+        ");
     }
 
     pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32)->InstanceWriter{
@@ -65,6 +66,7 @@ impl Rect{
         wr.float(cx, y);
         wr.float(cx, self.w);
         wr.float(cx, self.h);
+        wr.vec4(cx,0.0,1.0,1.0,1.0);
         wr
     }
 }
