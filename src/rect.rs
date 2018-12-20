@@ -61,13 +61,13 @@ impl Rect{
         sh.log =1;
     }
 
-    pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32)->InstanceWriter{
+    pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32, w:f32, h:f32)->InstanceWriter{
         let mut wr = cx.instance(self.shader);
         wr.float(cx, x);
         wr.float(cx, y);
-        wr.float(cx, self.w);
-        wr.float(cx, self.h);
-        wr.vec4(cx,0.0,1.0,0.0,1.0);
+        wr.float(cx, w);
+        wr.float(cx, h);
+        wr.vec4(cx,&self.color);
         wr
     }
 }
