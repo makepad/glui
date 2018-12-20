@@ -21,8 +21,8 @@ impl Style for Rect{
             id:0,
             x:0.0,
             y:0.0,
-            w:0.0,
-            h:0.0,
+            w:1.0,
+            h:1.0,
             color:Vec4{x:1.0,y:0.0,z:0.0,w:0.0}
         }
     }
@@ -32,13 +32,13 @@ impl Rect{
     pub fn def_shader(sh: &mut Shader){
         // lets add the draw shader lib
         Shader::draw_lib(sh);
-        sh.geom = vec![
+        sh.geometry_vertices = vec![
             0.0,0.0,
             1.0,0.0,
             1.0,1.0,
             0.0,1.0
         ];
-        sh.index = vec![
+        sh.geometry_indices = vec![
             0,1,2,
             2,3,0
         ];
@@ -58,6 +58,7 @@ impl Rect{
                 return vec4(pos*vec2(w, h)+vec2(x, y),0.,1.);
             }
         ");
+        sh.log =1;
     }
 
     pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32)->InstanceWriter{
@@ -66,7 +67,7 @@ impl Rect{
         wr.float(cx, y);
         wr.float(cx, self.w);
         wr.float(cx, self.h);
-        wr.vec4(cx,0.0,1.0,1.0,1.0);
+        wr.vec4(cx,0.0,1.0,0.0,1.0);
         wr
     }
 }

@@ -5,9 +5,9 @@ extern crate glutin;
 mod math;
 mod shader;
 mod context;
-use crate::context::*;
 mod rect;
 mod button;
+use crate::context::*;
 use crate::button::*;
 
 struct App{

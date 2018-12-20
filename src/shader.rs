@@ -56,15 +56,17 @@ pub struct ShaderStruct{
 pub struct CompiledShader{
     pub geom_slots:usize,
     pub inst_slots:usize,
+    pub geom_attribs:usize,
+    pub inst_attribs:usize,
     pub fragment:String,
     pub vertex:String
 }
 
 #[derive(Default,Clone)]
 pub struct Shader{
-    pub log:bool,
-    pub geom:Vec<f32>,
-    pub index:Vec<u16>,
+    pub log:i32,
+    pub geometry_vertices:Vec<f32>,
+    pub geometry_indices:Vec<u32>,
     pub geometries:Vec<ShaderVar>,
     pub instancing:Vec<ShaderVar>,
     pub varyings:Vec<ShaderVar>,
@@ -548,7 +550,7 @@ impl Shader{
 
         pix_final.push_str(&pix_main);
         // push the main functions
-        if self.log{
+        if self.log != 0{
             println!("---------- Vertex Shader ------- {}",  vtx_final);
             // push the main functions
             println!("---------- Pixel Shader --------- {}",  pix_final);
@@ -558,6 +560,8 @@ impl Shader{
         CompiledShader{
             geom_slots:geom_slots,
             inst_slots:inst_slots,
+            geom_attribs:Shader::ceil_div4(geom_slots),
+            inst_attribs:Shader::ceil_div4(inst_slots),
             fragment:pix_final,
             vertex:vtx_final
         }

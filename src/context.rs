@@ -6,8 +6,21 @@ use std::ptr;
 use crate::shader::*;
 
 #[derive(Default,Clone)]
+pub struct GLShaderAttrib{
+    loc:gl::types::GLuint,
+    size:gl::types::GLsizei,
+    offset:gl::types::GLsizei,
+    stride:gl::types::GLsizei
+}
+
+#[derive(Default,Clone)]
 pub struct GLShader{
-    program: gl::types::GLuint
+    program: gl::types::GLuint,
+    geom_attribs: Vec<GLShaderAttrib>,
+    inst_attribs: Vec<GLShaderAttrib>,
+    geom_vb: gl::types::GLuint,
+    geom_ib: gl::types::GLuint,
+    csh: CompiledShader
 }
 
 #[derive(Default,Clone)]
@@ -30,32 +43,32 @@ pub struct InstanceWriter{
 impl InstanceWriter{
     pub fn float(&mut self, cx: &mut Cx, v:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
-        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
-            instance_data.push(v);
+        if let DrawCmd::Instance{instance} = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance.data.push(v);
         }
     }
     pub fn vec2(&mut self, cx: &mut Cx, x:f32, y:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
-        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
-            instance_data.push(x);
-            instance_data.push(y);
+        if let DrawCmd::Instance{instance} = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance.data.push(x);
+            instance.data.push(y);
         }
     }
     pub fn vec3(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
-        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
-            instance_data.push(x);
-            instance_data.push(y);
-            instance_data.push(z);
+        if let DrawCmd::Instance{instance} = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance.data.push(x);
+            instance.data.push(y);
+            instance.data.push(z);
         }
     }
     pub fn vec4(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32, w:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
-        if let DrawCmd::Instance{ shader_id:_, instance_data, .. } = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
-            instance_data.push(x);
-            instance_data.push(y);
-            instance_data.push(z);
-            instance_data.push(w);
+        if let DrawCmd::Instance{instance} = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ] {
+            instance.data.push(x);
+            instance.data.push(y);
+            instance.data.push(z);
+            instance.data.push(w);
         }
     }
 }
@@ -68,14 +81,22 @@ impl Drop for InstanceWriter{
 }
 
 #[derive(Clone)]
+pub struct DrawCmdInstance{
+    shader_id:usize,
+    data:Vec<f32>,
+    update_frame_id: usize,
+    gl_vao:gl::types::GLuint,
+    gl_inst_vb:gl::types::GLuint
+}
+
+
+#[derive(Clone)]
 pub enum DrawCmd{
     SubList{
-        cmd_list_id:usize
+        list_id:usize
     },
     Instance{
-        shader_id:usize,
-        instance_data:Vec<f32>,
-        gl_buffer:i32
+       instance:DrawCmdInstance
     }
 }
 
@@ -153,6 +174,32 @@ impl Cx{
         }
     }
 
+    fn get_attribs(prefix:&str, slots:usize, num_attr:usize, program:gl::types::GLuint)->Vec<GLShaderAttrib>{
+        let mut attribs = Vec::new();
+        let stride = (slots * mem::size_of::<f32>()) as gl::types::GLsizei;
+        for i in 0..num_attr{
+            let mut name = prefix.to_string();
+            name.push_str(&i.to_string());
+            name.push_str("\0");
+            
+            let mut size = ((slots - i*4)) as gl::types::GLsizei;
+            if size > 4{
+                size = 4;
+            }
+            unsafe{
+                attribs.push(
+                    GLShaderAttrib{
+                        loc: gl::GetAttribLocation(program, name.as_ptr() as *const _) as gl::types::GLuint,
+                        offset: (i * 4 * mem::size_of::<f32>()) as i32,
+                        size:  size,
+                        stride: stride
+                    }
+                )
+            }
+        }
+        attribs
+    }
+
     fn compile_gl_shader(sh:&Shader)->Option<GLShader>{
         let csh = sh.compile();
         // now we have a pixel and a vertex shader
@@ -195,11 +242,33 @@ impl Cx{
             gl::DeleteShader(vs);
             gl::DeleteShader(fs);
 
+            let geom_attribs = Cx::get_attribs("geomattr", csh.geom_slots, csh.geom_attribs, program);
+            let inst_attribs = Cx::get_attribs("instattr", csh.inst_slots, csh.inst_attribs, program);
+
+            // lets create static geom and index buffers for this shader
+            let mut geom_vb = mem::uninitialized();
+            gl::GenBuffers(1, &mut geom_vb);
+            gl::BindBuffer(gl::ARRAY_BUFFER, geom_vb);
+            gl::BufferData(gl::ARRAY_BUFFER,
+                            (sh.geometry_vertices.len() * mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                            sh.geometry_vertices.as_ptr() as *const _, gl::STATIC_DRAW);
+
+            let mut geom_ib = mem::uninitialized();
+            gl::GenBuffers(1, &mut geom_ib);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, geom_ib);
+            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
+                            (sh.geometry_indices.len() * mem::size_of::<u32>()) as gl::types::GLsizeiptr,
+                            sh.geometry_indices.as_ptr() as *const _, gl::STATIC_DRAW);
+
             return Some(GLShader{
-                program:program
+                program:program,
+                geom_attribs:geom_attribs,
+                inst_attribs:inst_attribs,
+                geom_vb:geom_vb,
+                geom_ib:geom_ib,
+                csh:csh,
+                ..Default::default()
             })
-            // ok lets get the attributes
-            // and the uniforms
         }
     }
 
@@ -208,8 +277,8 @@ impl Cx{
         let draw_cmd_list = &mut self.draw_cmd_lists[self.draw_cmd_list_id];
         
         let index = draw_cmd_list.draw_cmds.iter().position(|dc| {
-            if let DrawCmd::Instance { shader_id, .. } = dc{
-                *shader_id == inst_shader_id
+            if let DrawCmd::Instance{instance} = dc{
+                instance.shader_id == inst_shader_id
             } else {
                 false
             }
@@ -220,16 +289,90 @@ impl Cx{
         }
         else{
             let id = draw_cmd_list.draw_cmds.len();
+
+            let shgl = &self.shaders_gl[inst_shader_id];
+            
+            // create the VAO
+            let mut vao;
+            let mut inst_vb;
+            unsafe{
+                vao = mem::uninitialized();
+                gl::GenVertexArrays(1, &mut vao);
+                gl::BindVertexArray(vao);
+                
+                // bind the vertex and indexbuffers
+                gl::BindBuffer(gl::ARRAY_BUFFER, shgl.geom_vb);
+                for attr in &shgl.geom_attribs{
+                    gl::VertexAttribPointer(attr.loc, attr.size, gl::FLOAT, 0, attr.stride, attr.offset as *const () as *const _);
+                    gl::EnableVertexAttribArray(attr.loc);
+                }
+
+                // create and bind the instance buffer
+                inst_vb = mem::uninitialized();
+                gl::GenBuffers(1, &mut inst_vb);
+                gl::BindBuffer(gl::ARRAY_BUFFER, inst_vb);
+                
+                for attr in &shgl.inst_attribs{
+                    //println!("{} {} {}", attr.loc, attr.size, attr.stride);
+                    gl::VertexAttribPointer(attr.loc, attr.size, gl::FLOAT, 0, attr.stride, attr.offset as *const () as *const _);
+                    gl::EnableVertexAttribArray(attr.loc);
+                    gl::VertexAttribDivisor(attr.loc, 1 as gl::types::GLuint);
+                }
+
+                // bind the indexbuffer
+                gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, shgl.geom_ib);
+                gl::BindVertexArray(0);
+            }
+            // mark instance data as 'new'
             draw_cmd_list.draw_cmds.push(DrawCmd::Instance{
-                shader_id:inst_shader_id,
-                instance_data:Vec::new(),
-                gl_buffer:0
+                instance:DrawCmdInstance{
+                    shader_id:inst_shader_id,
+                    data:Vec::new(),
+                    update_frame_id:self.frame_id,
+                    gl_inst_vb:inst_vb,
+                    gl_vao:vao
+                }
             });
             id
         };
         
         // see if we need to compile shader
         InstanceWriter{draw_cmd_id:draw_cmd_id}
+    }
+
+    fn exec_draw_cmd_list(&mut self, id: usize){
+        // tad ugly otherwise the borrow checker locks 'self'
+        let num_draw_cmds = self.draw_cmd_lists[id].draw_cmds.len();
+        for ci in 0..num_draw_cmds{
+            if let DrawCmd::Instance{instance} = &self.draw_cmd_lists[id].draw_cmds[ci]{
+                if instance.update_frame_id == self.frame_id{
+                    // update the instance buffer data
+                    unsafe{
+                        gl::BindBuffer(gl::ARRAY_BUFFER, instance.gl_inst_vb);
+                        gl::BufferData(gl::ARRAY_BUFFER,
+                                        (instance.data.len() * mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                                        instance.data.as_ptr() as *const _, gl::STATIC_DRAW);
+                    }
+                }
+
+                let sh = &self.shaders[instance.shader_id];
+                let shgl = &self.shaders_gl[instance.shader_id];
+
+                unsafe{
+                    gl::UseProgram(shgl.program);
+                    gl::BindVertexArray(instance.gl_vao);
+                    // how many instances do we have?
+                    // how many vertices do we have?
+                    let instances = instance.data.len() / shgl.csh.inst_slots;
+                    let indices = sh.geometry_indices.len();
+                    //println!("{:?}", instance.data);
+                    gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
+                }
+            }
+            else if let DrawCmd::SubList{list_id} = self.draw_cmd_lists[id].draw_cmds[ci]{
+                self.exec_draw_cmd_list(list_id);
+            }
+        }
     }
 
     pub fn event_loop<F>(&mut self, mut callback:F)
@@ -246,6 +389,9 @@ impl Cx{
         unsafe {
             gl_window.make_current().unwrap();
             gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
+            gl::ClearColor(0.3, 0.3, 0.3, 1.0);
+            gl::Enable(gl::DEPTH_TEST);
+            gl::DepthFunc(gl::LESS);            
         }
 
         // lets compile all shaders
@@ -277,8 +423,15 @@ impl Cx{
                 }
             });
             callback(self, Ev::Redraw);
-            // lets paint the drawcommand tree
+            
+            unsafe{
+                gl::Clear(gl::COLOR_BUFFER_BIT|gl::DEPTH_BUFFER_BIT);
+            }
 
+            // lets paint the drawcommand tree
+            self.exec_draw_cmd_list(0);
+
+            gl_window.swap_buffers().unwrap();
         }
     }
 }
@@ -312,6 +465,19 @@ impl Draw{
             }
             self.initialized = true;
         }
+        else{
+            let draw_cmd_list = &mut cx.draw_cmd_lists[self.draw_cmd_list_id];
+            draw_cmd_list.draw_cmds.truncate(0);
+        }
+        // push ourselves up the parent draw_stack
+        if let Some(draw) = cx.draw_stack.last(){
+            cx.draw_cmd_lists[draw.draw_cmd_list_id].draw_cmds.push({
+                DrawCmd::SubList{
+                    list_id:self.draw_cmd_list_id
+                }
+            })
+        }
+
         cx.draw_cmd_list_id = self.draw_cmd_list_id;
         cx.draw_stack.push(self.clone());
     }
