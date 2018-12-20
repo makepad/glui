@@ -308,7 +308,6 @@ impl Cx{
             gl::BindBuffer(gl::ARRAY_BUFFER, inst_vb);
             
             for attr in &shgl.inst_attribs{
-                //println!("{} {} {}", attr.loc, attr.size, attr.stride);
                 gl::VertexAttribPointer(attr.loc, attr.size, gl::FLOAT, 0, attr.stride, attr.offset as *const () as *const _);
                 gl::EnableVertexAttribArray(attr.loc);
                 gl::VertexAttribDivisor(attr.loc, 1 as gl::types::GLuint);
@@ -413,11 +412,8 @@ impl Cx{
                 unsafe{
                     gl::UseProgram(shgl.program);
                     gl::BindVertexArray(draw_cmd.vao.vao);
-                    // how many instances do we have?
-                    // how many vertices do we have?
                     let instances = draw_cmd.instance.len() / shgl.csh.inst_slots;
                     let indices = sh.geometry_indices.len();
-                    //println!("{:?}", instance.data);
                     gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
                 }
             }
