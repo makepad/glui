@@ -29,7 +29,7 @@ impl Button{
     }
 
     pub fn handle_click(&mut self, cx:&mut Cx, ev:&Ev)->bool{
-        self.handle(cx,ev);
+        self.handle(cx, ev);
         self.did_click()
     }
 
@@ -39,15 +39,15 @@ impl Button{
 
     pub fn draw_with_label(&mut self, cx:&mut Cx, _label: &str){
         self.draw.begin(cx);
-        self.time = self.time + 0.001;
-        for i in 0..1000{
+        self.time = self.time + 0.01;
+        for i in 0..200000{
             self.bg.color.x = 0.5+0.5*f32::sin(i as f32 / 10.0+self.time);
             self.bg.color.y = 0.5+0.5*f32::cos(i as f32 / 10.0+self.time);
             self.bg.color.z = 0.5+0.5*f32::cos(i as f32 / 10.0+1.5+self.time);
             self.bg.draw_at(cx, 
-                f32::sin(i as f32 / 10.0+self.time), 
-                f32::cos(i as f32 / 60.0+self.time),
-                0.1, 0.1);
+                f32::sin(i as f32 / 5.0+self.time), 
+                f32::cos(i as f32 / 3.2+self.time),
+                0.01, 0.01);
         }
 
         self.draw.end(cx);

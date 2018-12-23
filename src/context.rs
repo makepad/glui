@@ -34,33 +34,35 @@ pub struct Cx{
     pub draw_stack: Vec<Draw>,
     pub draw_cmd_list_id: usize,
     pub frame_id: usize,
-    pub shaders_gl: Vec<GLShader>
+    pub shaders_gl: Vec<GLShader>,
+    pub uniforms:CxUniforms
 }
 
 pub struct InstanceWriter{
-    draw_cmd_id:usize
+    draw_cmd_id:usize,
+    pub uniforms:bool
 }
 
 impl InstanceWriter{
-    pub fn float(&mut self, cx: &mut Cx, v:f32){
+    pub fn float(&mut self, cx: &mut Cx, name: &str, v:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(v);
     }
-    pub fn vec2f(&mut self, cx: &mut Cx, x:f32, y:f32){
+    pub fn vec2f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(x);
         draw_cmd.instance.push(y);
     }
-    pub fn vec3f(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32){
+    pub fn vec3f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(x);
         draw_cmd.instance.push(y);
         draw_cmd.instance.push(z);
     }
-    pub fn vec4f(&mut self, cx: &mut Cx, x:f32, y:f32, z:f32, w:f32){
+    pub fn vec4f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32, w:f32){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(x);
@@ -68,26 +70,80 @@ impl InstanceWriter{
         draw_cmd.instance.push(z);
         draw_cmd.instance.push(w);
     }
-    pub fn vec2(&mut self, cx: &mut Cx, v:&Vec2){
+    pub fn vec2(&mut self, cx: &mut Cx, name: &str, v:&Vec2){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(v.x);
         draw_cmd.instance.push(v.y);
     }
-    pub fn vec3(&mut self, cx: &mut Cx, v:&Vec3){
+    pub fn vec3(&mut self, cx: &mut Cx, name: &str, v:&Vec3){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(v.x);
         draw_cmd.instance.push(v.y);
         draw_cmd.instance.push(v.z);
     }
-    pub fn vec4(&mut self, cx: &mut Cx, v:&Vec4){
+    pub fn vec4(&mut self, cx: &mut Cx, name: &str, v:&Vec4){
         let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
         let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
         draw_cmd.instance.push(v.x);
         draw_cmd.instance.push(v.y);
         draw_cmd.instance.push(v.z);
         draw_cmd.instance.push(v.w);
+    }
+    pub fn ufloat(&mut self, cx: &mut Cx, name: &str, v:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(v);
+    }
+    pub fn uvec2f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+    }
+    pub fn uvec3f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+        draw_cmd.uniforms.push(z);
+    }
+    pub fn uvec4f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32, w:f32){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+        draw_cmd.uniforms.push(z);
+        draw_cmd.uniforms.push(w);
+    }
+    pub fn uvec2(&mut self, cx: &mut Cx, name: &str, v:&Vec2){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+    }
+    pub fn uvec3(&mut self, cx: &mut Cx, name: &str, v:&Vec3){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+        draw_cmd.uniforms.push(v.z);
+    }
+    pub fn uvec4(&mut self, cx: &mut Cx, name: &str, v:&Vec4){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+        draw_cmd.uniforms.push(v.z);
+        draw_cmd.uniforms.push(v.w);
+    }
+    pub fn umat4(&mut self, cx: &mut Cx, name: &str, v:&Mat4){
+        let draw_cmd_list = &mut cx.draw_cmd_lists[cx.draw_cmd_list_id];
+        let draw_cmd = &mut draw_cmd_list.draw_cmds[self.draw_cmd_id ];
+        for i in 0..16{
+            draw_cmd.uniforms.push(v.v[i]);
+        }
     }
 }
 
@@ -109,14 +165,17 @@ pub struct DrawCmd{
     sub_list_id:usize, // if not 0, its a subnode
     shader_id:usize, // if shader_id changed, delete gl vao
     instance:Vec<f32>,
+    uniforms:Vec<f32>,  // drawcmd uniforms
     update_frame_id: usize,
     vao:GLInstanceVAO,
 }
 
+
 #[derive(Default,Clone)]
 pub struct DrawCmdList{
     pub draw_cmds:Vec<DrawCmd>,
-    pub draw_cmds_len: usize
+    pub draw_cmds_len: usize,
+    pub uniforms:DrawCmdListUniforms // cmdlist uniforms
 }
 
 pub enum Ev{
@@ -127,7 +186,29 @@ pub enum Ev{
     FingerUp{x:f32, y:f32},
 }
 
+#[derive(Default,Clone)]
+pub struct DrawCmdListUniforms{
+    pub prop2:f32
+}
+
+#[derive(Default,Clone)]
+pub struct CxUniforms{
+    pub prop1:f32
+}
+
 impl Cx{
+    pub fn uniform_defs(&mut self, sh:&mut Shader){
+        // ok so cant we make uniforms a struct?
+        //sh.uniform("prop1", kind: Kind, block: UniBlock)
+    }
+
+    pub fn set_uniforms(&mut self, dc:&DrawCmd){
+
+        // first we set the CxUniforms
+        // then the drawcmdlistUniforms
+        // then the DrawCmd uniforms
+    }
+
     pub fn add_shader(&mut self, sh:&Shader)->usize{
         let id = self.shaders.len();
         // lets compile this sh
@@ -274,6 +355,9 @@ impl Cx{
                             (sh.geometry_indices.len() * mem::size_of::<u32>()) as gl::types::GLsizeiptr,
                             sh.geometry_indices.as_ptr() as *const _, gl::STATIC_DRAW);
 
+            // lets fetch the uniform positions for our uniforms
+
+
             return Some(GLShader{
                 program:program,
                 geom_attribs:geom_attribs,
@@ -339,7 +423,7 @@ impl Cx{
             let dc = &draw_cmd_list.draw_cmds[i];
             if dc.shader_id == inst_shader_id{
                 // reuse this drawcmd.
-                return InstanceWriter{draw_cmd_id:i}
+                return InstanceWriter{draw_cmd_id:i, uniforms:false}
             }
         }  
 
@@ -354,37 +438,31 @@ impl Cx{
                 sub_list_id:0,
                 shader_id:inst_shader_id,
                 instance:Vec::new(),
+                uniforms:Vec::new(),
                 update_frame_id:self.frame_id,
                 vao:Cx::create_vao(shgl)
             });
-            return InstanceWriter{draw_cmd_id:id}
+            return InstanceWriter{draw_cmd_id:id, uniforms:true}
         }
 
         // reuse a sub list node
         let draw_cmd = &mut draw_cmd_list.draw_cmds[id];
-        if draw_cmd.sub_list_id != 0{ // we used to be a sublist
+        // we used to be a sublist, construct vao
+        if draw_cmd.sub_list_id != 0{ 
             draw_cmd.shader_id = inst_shader_id;
-            draw_cmd.instance.truncate(0);
-            draw_cmd.update_frame_id = self.frame_id;
             draw_cmd.vao = Cx::create_vao(shgl);
-            return InstanceWriter{draw_cmd_id:id}
         }
- 
-        // re use another shader
-        if draw_cmd.shader_id != inst_shader_id{
+        // used to be another shader, destroy/construct vao
+        else if draw_cmd.shader_id != inst_shader_id{ 
             Cx::destroy_vao(&mut draw_cmd.vao);
-            draw_cmd.shader_id = inst_shader_id;
-            draw_cmd.instance.truncate(0);
-            draw_cmd.update_frame_id = self.frame_id;
             draw_cmd.vao = Cx::create_vao(shgl);
-            return InstanceWriter{draw_cmd_id:id}
+            draw_cmd.shader_id = inst_shader_id;
         }
-
-        // we are the same shader, so just truncate instance and go
+        // truncate buffers and set update frame
         draw_cmd.instance.truncate(0);
+        draw_cmd.uniforms.truncate(0);
         draw_cmd.update_frame_id = self.frame_id;
-        
-        InstanceWriter{draw_cmd_id:id}
+        InstanceWriter{draw_cmd_id:id, uniforms:true}
     }
 
     fn exec_draw_cmd_list(&mut self, id: usize){
@@ -414,6 +492,12 @@ impl Cx{
                     gl::BindVertexArray(draw_cmd.vao.vao);
                     let instances = draw_cmd.instance.len() / shgl.csh.inst_slots;
                     let indices = sh.geometry_indices.len();
+
+                    // set up the global uniforms (once per program)
+
+                    // set up the list uniforms (once per program per list)
+
+                    // set up the draw uniforms (always)
                     gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
                 }
             }
@@ -479,6 +563,7 @@ impl Cx{
             gl_window.swap_buffers().unwrap();
         }
     }
+
 }
 
 pub trait Style{

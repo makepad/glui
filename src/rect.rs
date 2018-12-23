@@ -15,7 +15,7 @@ pub struct Rect{
 impl Style for Rect{
     fn style(cx:&mut Cx)->Self{
         let mut sh = Shader::def(); 
-        Self::def_shader(&mut sh);
+        Self::def_shader(cx, &mut sh);
         Self{
             shader:cx.add_shader(&sh),
             id:0,
@@ -29,9 +29,10 @@ impl Style for Rect{
 }
 
 impl Rect{
-    pub fn def_shader(sh: &mut Shader){
+    pub fn def_shader(cx: &mut Cx, sh: &mut Shader){
         // lets add the draw shader lib
-        Shader::draw_lib(sh);
+        Shader::default_defs(cx, sh);
+
         sh.geometry_vertices = vec![
             0.0,0.0,
             1.0,0.0,
@@ -47,6 +48,8 @@ impl Rect{
         sh.instance("y", Kind::Float);
         sh.instance("w", Kind::Float);
         sh.instance("h", Kind::Float);
+        sh.uniform("fac", Kind::Float, UniBlock::Call);
+        
         sh.instancev("color", Kind::Vec4);
         sh.method("
             vec4 pixel(){
@@ -63,11 +66,15 @@ impl Rect{
 
     pub fn draw_at(&mut self, cx:&mut Cx, x:f32, y:f32, w:f32, h:f32)->InstanceWriter{
         let mut wr = cx.instance(self.shader);
-        wr.float(cx, x);
-        wr.float(cx, y);
-        wr.float(cx, w);
-        wr.float(cx, h);
-        wr.vec4(cx,&self.color);
+        if wr.uniforms{
+            wr.ufloat(cx, "fac", 1.0);
+        }
+
+        wr.float(cx, "x", x);
+        wr.float(cx, "y", y);
+        wr.float(cx, "w", w);
+        wr.float(cx, "h", h);
+        wr.vec4(cx, "color", &self.color);
         wr
     }
 }

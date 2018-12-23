@@ -1,3 +1,5 @@
+use crate::context::*;
+
 #[derive(Clone,PartialEq)]
 pub enum Kind{
     Float,
@@ -34,10 +36,30 @@ impl Kind{
     }    
 }
 
+#[derive(Clone,PartialEq)]
+pub enum UniBlock{
+   Cx, // global uniform props
+   Cmds, // draw list uniform props
+   Call // draw call uniforms
+}
+
+impl Default for UniBlock{
+    fn default()->UniBlock{
+        UniBlock::Call
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct ShaderVar{
     pub name:String,
     pub kind:Kind
+}
+
+#[derive(Default, Clone)]
+pub struct ShaderUniform{
+    pub name:String,
+    pub kind:Kind,
+    pub block:UniBlock
 }
 
 #[derive(Default, Clone)]
@@ -73,7 +95,7 @@ pub struct Shader{
     pub locals:Vec<ShaderVar>,
     pub defines:Vec<ShaderDef>,
     pub structs:Vec<ShaderStruct>,
-    pub uniforms:Vec<ShaderVar>,
+    pub uniforms:Vec<ShaderUniform>,
     pub methods:Vec<String>
 }
 
@@ -118,11 +140,12 @@ impl Shader{
         );
     }
 
-   pub fn uniform(&mut self, name:&str, kind:Kind){
+   pub fn uniform(&mut self, name:&str, kind:Kind, block:UniBlock){
         self.uniforms.push(
-            ShaderVar{
+            ShaderUniform{
                 name:name.to_string(),
-                kind:kind
+                kind:kind,
+                block:block
             }
         );
     }
@@ -250,6 +273,19 @@ impl Shader{
             r.push_str(" ");
             r.push_str(base);
             r.push_str(&i.to_string());
+            r.push_str(";\n");
+        }
+        r
+    }
+
+    fn uniforms_def(uniforms: &Vec<ShaderUniform> )->String{
+        // ok lets do a ceil
+        let mut r = "".to_string();
+        for u in uniforms{
+            r.push_str("uniform ");
+            r.push_str(u.kind.name());
+            r.push_str(" ");
+            r.push_str(&u.name);
             r.push_str(";\n");
         }
         r
@@ -473,6 +509,12 @@ impl Shader{
         let mut vtx_final = "#version 100\nprecision highp float;\n".to_string();
         let mut pix_final = "#version 100\nprecision highp float;\n".to_string();
 
+        vtx_final.push_str("\n// Uniforms\n");
+        vtx_final.push_str(&Shader::uniforms_def(&self.uniforms));
+       
+        pix_final.push_str("\n// Uniforms\n");
+        pix_final.push_str(&Shader::uniforms_def(&self.uniforms));
+
         // count slots
         let geom_slots:usize = self.geometries.iter().map(|v| v.kind.slots()).sum();
         let inst_slots:usize = self.instancing.iter().map(|v| v.kind.slots()).sum();
@@ -577,8 +619,9 @@ impl Shader{
         sh
     }
 
-    pub fn draw_lib(sh:&mut Shader){
-        
+    pub fn default_defs(cx: &mut Cx, sh:&mut Shader){
+        cx.uniform_defs(sh);
+
         sh.define("PI","3.141592653589793");
 		sh.define("E","2.718281828459045");
 		sh.define("LN2","0.6931471805599453");
@@ -589,6 +632,12 @@ impl Shader{
 		sh.define("TORAD","0.017453292519943295");
 		sh.define("GOLDEN","1.618033988749895");
 
+        Shader::draw_lib(sh);
+    }
+
+    pub fn draw_lib(sh:&mut Shader){
+        
+       
         sh.local("draw_pos", Kind::Vec2);
         sh.local("draw_last_pos", Kind::Vec2);
         sh.local("draw_start_pos", Kind::Vec2);
