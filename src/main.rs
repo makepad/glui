@@ -11,14 +11,14 @@ use crate::context::*;
 use crate::button::*;
 
 struct App{
-    draw:Draw,
+    draw_cx:DrawCx,
     ok_button:Button
 }
 
 impl Style for App{
     fn style(cx:&mut Cx)->Self{
         Self{
-            draw:Draw{..Default::default()},
+            draw:DrawCx{..Default::default()},
             ok_button:Button{
                 ..Style::style(cx)
             }
@@ -34,11 +34,11 @@ impl App{
     }
 
     fn draw(&mut self, cx:&mut Cx){
-        self.draw.begin(cx);
+        self.draw_cx.begin(cx);
 
         self.ok_button.draw_with_label(cx, "OK");
 
-        self.draw.end(cx);
+        self.draw_cx.end(cx);
     }
 }
 
