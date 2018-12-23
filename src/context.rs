@@ -15,10 +15,17 @@ pub struct GLShaderAttrib{
 }
 
 #[derive(Default,Clone)]
+pub struct GLShaderUniform{
+    loc:gl::types::GLuint,
+    name:String
+}
+
+#[derive(Default,Clone)]
 pub struct GLShader{
     program: gl::types::GLuint,
     geom_attribs: Vec<GLShaderAttrib>,
     inst_attribs: Vec<GLShaderAttrib>,
+    uniforms: Vec<GLShaderUniform>,
     geom_vb: gl::types::GLuint,
     geom_ib: gl::types::GLuint,
     csh: CompiledShader
@@ -38,120 +45,22 @@ pub struct Cx{
     pub uniforms:CxUniforms
 }
 
+#[derive(Default,Clone)]
+pub struct DrawCx{ // draw info per UI element
+    pub id:usize,
+    pub x:f32,
+    pub y:f32,
+    pub w:f32,
+    pub h:f32,
+    pub frame_id:usize,
+    pub initialized:bool,
+    // the set of shader_id + 
+    pub draw_list_id:usize 
+}
+
 pub struct InstanceWriter{
-    draw_cmd_id:usize,
+    draw_id:usize,
     pub uniforms:bool
-}
-
-impl InstanceWriter{
-    pub fn float(&mut self, cx: &mut Cx, name: &str, v:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(v);
-    }
-    pub fn vec2f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(x);
-        draw_cmd.instance.push(y);
-    }
-    pub fn vec3f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(x);
-        draw_cmd.instance.push(y);
-        draw_cmd.instance.push(z);
-    }
-    pub fn vec4f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32, w:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(x);
-        draw_cmd.instance.push(y);
-        draw_cmd.instance.push(z);
-        draw_cmd.instance.push(w);
-    }
-    pub fn vec2(&mut self, cx: &mut Cx, name: &str, v:&Vec2){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(v.x);
-        draw_cmd.instance.push(v.y);
-    }
-    pub fn vec3(&mut self, cx: &mut Cx, name: &str, v:&Vec3){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(v.x);
-        draw_cmd.instance.push(v.y);
-        draw_cmd.instance.push(v.z);
-    }
-    pub fn vec4(&mut self, cx: &mut Cx, name: &str, v:&Vec4){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.instance.push(v.x);
-        draw_cmd.instance.push(v.y);
-        draw_cmd.instance.push(v.z);
-        draw_cmd.instance.push(v.w);
-    }
-    pub fn ufloat(&mut self, cx: &mut Cx, name: &str, v:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(v);
-    }
-    pub fn uvec2f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(x);
-        draw_cmd.uniforms.push(y);
-    }
-    pub fn uvec3f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(x);
-        draw_cmd.uniforms.push(y);
-        draw_cmd.uniforms.push(z);
-    }
-    pub fn uvec4f(&mut self, cx: &mut Cx, name: &str, x:f32, y:f32, z:f32, w:f32){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(x);
-        draw_cmd.uniforms.push(y);
-        draw_cmd.uniforms.push(z);
-        draw_cmd.uniforms.push(w);
-    }
-    pub fn uvec2(&mut self, cx: &mut Cx, name: &str, v:&Vec2){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(v.x);
-        draw_cmd.uniforms.push(v.y);
-    }
-    pub fn uvec3(&mut self, cx: &mut Cx, name: &str, v:&Vec3){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(v.x);
-        draw_cmd.uniforms.push(v.y);
-        draw_cmd.uniforms.push(v.z);
-    }
-    pub fn uvec4(&mut self, cx: &mut Cx, name: &str, v:&Vec4){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        draw_cmd.uniforms.push(v.x);
-        draw_cmd.uniforms.push(v.y);
-        draw_cmd.uniforms.push(v.z);
-        draw_cmd.uniforms.push(v.w);
-    }
-    pub fn umat4(&mut self, cx: &mut Cx, name: &str, v:&Mat4){
-        let draw_cmd_list = &mut cx.draw_lists[cx.draw_list_id];
-        let draw_cmd = &mut draw_cmd_list.draws[self.draw_cmd_id ];
-        for i in 0..16{
-            draw_cmd.uniforms.push(v.v[i]);
-        }
-    }
-}
-
-impl Drop for InstanceWriter{
-    fn drop(&mut self){
-        // verify if we have written the complete instance propset
-        // and not too much/too little
-    }
 }
 
 #[derive(Default,Clone)]
@@ -186,6 +95,117 @@ pub enum Ev{
     FingerUp{x:f32, y:f32},
 }
 
+impl InstanceWriter{
+    pub fn float(&mut self, cx: &mut Cx, _name: &str, v:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(v);
+    }
+    pub fn vec2f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(x);
+        draw_cmd.instance.push(y);
+    }
+    pub fn vec3f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32, z:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(x);
+        draw_cmd.instance.push(y);
+        draw_cmd.instance.push(z);
+    }
+    pub fn vec4f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32, z:f32, w:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(x);
+        draw_cmd.instance.push(y);
+        draw_cmd.instance.push(z);
+        draw_cmd.instance.push(w);
+    }
+    pub fn vec2(&mut self, cx: &mut Cx, _name: &str, v:&Vec2){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(v.x);
+        draw_cmd.instance.push(v.y);
+    }
+    pub fn vec3(&mut self, cx: &mut Cx, _name: &str, v:&Vec3){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(v.x);
+        draw_cmd.instance.push(v.y);
+        draw_cmd.instance.push(v.z);
+    }
+    pub fn vec4(&mut self, cx: &mut Cx, _name: &str, v:&Vec4){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.instance.push(v.x);
+        draw_cmd.instance.push(v.y);
+        draw_cmd.instance.push(v.z);
+        draw_cmd.instance.push(v.w);
+    }
+    pub fn ufloat(&mut self, cx: &mut Cx, _name: &str, v:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(v);
+    }
+    pub fn uvec2f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+    }
+    pub fn uvec3f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32, z:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+        draw_cmd.uniforms.push(z);
+    }
+    pub fn uvec4f(&mut self, cx: &mut Cx, _name: &str, x:f32, y:f32, z:f32, w:f32){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(x);
+        draw_cmd.uniforms.push(y);
+        draw_cmd.uniforms.push(z);
+        draw_cmd.uniforms.push(w);
+    }
+    pub fn uvec2(&mut self, cx: &mut Cx, _name: &str, v:&Vec2){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+    }
+    pub fn uvec3(&mut self, cx: &mut Cx, _name: &str, v:&Vec3){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+        draw_cmd.uniforms.push(v.z);
+    }
+    pub fn uvec4(&mut self, cx: &mut Cx, _name: &str, v:&Vec4){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        draw_cmd.uniforms.push(v.x);
+        draw_cmd.uniforms.push(v.y);
+        draw_cmd.uniforms.push(v.z);
+        draw_cmd.uniforms.push(v.w);
+    }
+    pub fn umat4(&mut self, cx: &mut Cx, _name: &str, v:&Mat4){
+        let draw_list = &mut cx.draw_lists[cx.draw_list_id];
+        let draw_cmd = &mut draw_list.draws[self.draw_id ];
+        for i in 0..16{
+            draw_cmd.uniforms.push(v.v[i]);
+        }
+    }
+}
+
+impl Drop for InstanceWriter{
+    fn drop(&mut self){
+        // verify if we have written the complete instance propset
+        // and not too much/too little
+    }
+}
+
 #[derive(Default,Clone)]
 pub struct DrawListUniforms{
     pub prop2:f32
@@ -197,13 +217,19 @@ pub struct CxUniforms{
 }
 
 impl Cx{
-    pub fn uniform_defs(&mut self, sh:&mut Shader){
+
+
+    pub fn def_shader(&mut self, sh:&mut Shader){
+        Shader::def_df(sh);
+        Shader::def_constants(sh);
         // ok so cant we make uniforms a struct?
-        //sh.uniform("prop1", kind: Kind, block: UniBlock)
+        sh.list_uniform("prop2", Kind::Float);
+        sh.cx_uniform("prop1", Kind::Float);
     }
 
-    pub fn set_uniforms(&mut self, draw:&Draw){
-
+    pub fn set_uniforms(&mut self, draw_list_id:usize, draw_id:usize){
+        let draw_list = &mut self.draw_lists[draw_list_id];
+        let draw_cmd = &mut draw_list.draws[draw_id];
         // first we set the CxUniforms
         // then the drawcmdlistUniforms
         // then the DrawCmd uniforms
@@ -216,7 +242,7 @@ impl Cx{
         id
     }
 
-    pub fn add_draw_cmd_list(&mut self)->usize{
+    pub fn add_draw_list(&mut self)->usize{
         let id = self.draw_lists.len();
         self.draw_lists.push(DrawList{..Default::default()});
         id
@@ -416,25 +442,25 @@ impl Cx{
 
     pub fn instance(&mut self, inst_shader_id:usize)->InstanceWriter{
         //let sh = &mut self.shaders[inst_shader_id];
-        let draw_cmd_list = &mut self.draw_lists[self.draw_list_id];
+        let draw_list = &mut self.draw_lists[self.draw_list_id];
         
         // find our drawcall in the filled draws
-        for i in (0..draw_cmd_list.draws_len).rev(){
-            let dc = &draw_cmd_list.draws[i];
+        for i in (0..draw_list.draws_len).rev(){
+            let dc = &draw_list.draws[i];
             if dc.shader_id == inst_shader_id{
                 // reuse this drawcmd.
-                return InstanceWriter{draw_cmd_id:i, uniforms:false}
+                return InstanceWriter{draw_id:i, uniforms:false}
             }
         }  
 
         // we need a new draw_cmd
-        let id = draw_cmd_list.draws_len;
-        draw_cmd_list.draws_len = draw_cmd_list.draws_len + 1;
+        let id = draw_list.draws_len;
+        draw_list.draws_len = draw_list.draws_len + 1;
         let shgl = &self.shaders_gl[inst_shader_id];
         
         // see if we need to add a new one
-        if draw_cmd_list.draws_len > draw_cmd_list.draws.len(){
-            draw_cmd_list.draws.push(DrawCmd{
+        if draw_list.draws_len > draw_list.draws.len(){
+            draw_list.draws.push(Draw{
                 sub_list_id:0,
                 shader_id:inst_shader_id,
                 instance:Vec::new(),
@@ -442,11 +468,11 @@ impl Cx{
                 update_frame_id:self.frame_id,
                 vao:Cx::create_vao(shgl)
             });
-            return InstanceWriter{draw_cmd_id:id, uniforms:true}
+            return InstanceWriter{draw_id:id, uniforms:true}
         }
 
         // reuse a sub list node
-        let draw_cmd = &mut draw_cmd_list.draws[id];
+        let draw_cmd = &mut draw_list.draws[id];
         // we used to be a sublist, construct vao
         if draw_cmd.sub_list_id != 0{ 
             draw_cmd.shader_id = inst_shader_id;
@@ -462,7 +488,7 @@ impl Cx{
         draw_cmd.instance.truncate(0);
         draw_cmd.uniforms.truncate(0);
         draw_cmd.update_frame_id = self.frame_id;
-        InstanceWriter{draw_cmd_id:id, uniforms:true}
+        InstanceWriter{draw_id:id, uniforms:true}
     }
 
     fn exec_draw_list(&mut self, id: usize){
@@ -470,7 +496,7 @@ impl Cx{
         for ci in 0..self.draw_lists[id].draws_len{
             let sub_list_id = self.draw_lists[id].draws[ci].sub_list_id;
             if sub_list_id != 0{
-                self.exec_draw_cmd_list(sub_list_id);
+                self.exec_draw_list(sub_list_id);
             }
             else{
                 let draw_cmd = &self.draw_lists[id].draws[ci];
@@ -558,7 +584,7 @@ impl Cx{
             }
 
             // lets paint the drawcommand tree
-            self.exec_draw_cmd_list(0);
+            self.exec_draw_list(0);
 
             gl_window.swap_buffers().unwrap();
         }
@@ -568,19 +594,6 @@ impl Cx{
 
 pub trait Style{
     fn style(cx:&mut Cx) -> Self;
-}
-
-#[derive(Default,Clone)]
-pub struct DrawCx{ // draw info per UI element
-    pub id:usize,
-    pub x:f32,
-    pub y:f32,
-    pub w:f32,
-    pub h:f32,
-    pub frame_id:usize,
-    pub initialized:bool,
-    // the set of shader_id + 
-    pub draw_list_id:usize 
 }
 
 impl DrawCx{
@@ -597,21 +610,21 @@ impl DrawCx{
         }
         else{
             // set len to 0
-            let draw_cmd_list = &mut cx.draw_lists[self.draw_list_id];
-            draw_cmd_list.draws_len = 0;
+            let draw_list = &mut cx.draw_lists[self.draw_list_id];
+            draw_list.draws_len = 0;
         }
         // push ourselves up the parent draw_stack
         if let Some(draw) = cx.draw_cx_stack.last(){
 
             // we need a new draw_cmd
-            let draw_cmd_list = &mut cx.draw_lists[draw.draw_list_id];
+            let draw_list = &mut cx.draw_lists[draw.draw_list_id];
 
-            let id = draw_cmd_list.draws_len;
-            draw_cmd_list.draws_len = draw_cmd_list.draws_len + 1;
+            let id = draw_list.draws_len;
+            draw_list.draws_len = draw_list.draws_len + 1;
             
             // see if we need to add a new one
-            if draw_cmd_list.draws_len > draw_cmd_list.draws.len(){
-                draw_cmd_list.draws.push({
+            if draw_list.draws_len > draw_list.draws.len(){
+                draw_list.draws.push({
                     Draw{
                         sub_list_id:self.draw_list_id,
                         ..Default::default()
@@ -619,7 +632,7 @@ impl DrawCx{
                 })
             }
             else{// or reuse a sub list node
-                let draw_cmd = &mut draw_cmd_list.draws[id];
+                let draw_cmd = &mut draw_list.draws[id];
                 if draw_cmd.sub_list_id == 0{ // we used to be a drawcmd
                     Cx::destroy_vao(&mut draw_cmd.vao);
                     draw_cmd.sub_list_id = self.draw_list_id;

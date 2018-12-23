@@ -31,7 +31,7 @@ impl Style for Rect{
 impl Rect{
     pub fn def_shader(cx: &mut Cx, sh: &mut Shader){
         // lets add the draw shader lib
-        Shader::default_defs(cx, sh);
+        cx.def_shader(sh);
 
         sh.geometry_vertices = vec![
             0.0,0.0,
@@ -48,7 +48,8 @@ impl Rect{
         sh.instance("y", Kind::Float);
         sh.instance("w", Kind::Float);
         sh.instance("h", Kind::Float);
-        sh.uniform("fac", Kind::Float, UniBlock::Call);
+        // this allocates a uniform slot ID in the call buffer
+        sh.uniform("fac", Kind::Float);
         
         sh.instancev("color", Kind::Vec4);
         sh.method("

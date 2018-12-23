@@ -18,7 +18,7 @@ struct App{
 impl Style for App{
     fn style(cx:&mut Cx)->Self{
         Self{
-            draw:DrawCx{..Default::default()},
+            draw_cx:DrawCx{..Default::default()},
             ok_button:Button{
                 ..Style::style(cx)
             }

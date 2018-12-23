@@ -15,7 +15,7 @@ impl Style for Button{
     fn style(cx:&mut Cx)->Self{
         Self{
             time:0.0,
-            draw:DrawCx{..Default::default()},
+            draw_cx:DrawCx{..Default::default()},
             label:"OK".to_string(),
             did_click:false,
             bg:Rect{..Style::style(cx)}
