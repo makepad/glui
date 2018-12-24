@@ -14,7 +14,7 @@ impl Default for Kind{
 }
 
 impl Kind{
-    fn slots(&self)->usize{
+    pub fn slots(&self)->usize{
         match self {
             Kind::Float=>1,
             Kind::Vec2=>2,
@@ -23,7 +23,7 @@ impl Kind{
             Kind::Mat4=>16
         }
     }
-    fn name(&self)->&str{
+    pub fn name(&self)->&str{
         match self {
             Kind::Float=>"float",
             Kind::Vec2=>"vec2",
@@ -79,9 +79,10 @@ pub struct Shader{
     pub locals:Vec<ShaderVar>,
     pub defines:Vec<ShaderDef>,
     pub structs:Vec<ShaderStruct>,
-    pub df_uniforms:Vec<ShaderUniform>,
-    pub list_uniforms:Vec<ShaderUniform>,
+    pub dr_uniforms:Vec<ShaderUniform>,
+    pub dl_uniforms:Vec<ShaderUniform>,
     pub cx_uniforms:Vec<ShaderUniform>,
+    pub sampler2Ds:Vec<String>,
     pub methods:Vec<String>
 }
 
@@ -108,6 +109,11 @@ impl Shader{
             }
         );
     }
+
+    pub fn sampler2D(&mut self, name:&str){
+        self.sampler2Ds.push(name.to_string());
+    }
+
     pub fn instance(&mut self, name:&str, kind:Kind){
         self.instancing.push(
             ShaderVar{
@@ -127,7 +133,7 @@ impl Shader{
     }
 
    pub fn uniform(&mut self, name:&str, kind:Kind){
-        self.df_uniforms.push(
+        self.dr_uniforms.push(
             ShaderUniform{
                 name:name.to_string(),
                 kind:kind
@@ -135,8 +141,8 @@ impl Shader{
         );
     }
 
-   pub fn list_uniform(&mut self, name:&str, kind:Kind){
-        self.list_uniforms.push(
+   pub fn dl_uniform(&mut self, name:&str, kind:Kind){
+        self.dl_uniforms.push(
             ShaderUniform{
                 name:name.to_string(),
                 kind:kind
@@ -512,23 +518,23 @@ impl Shader{
         let mut vtx_final = "#version 100\nprecision highp float;\n".to_string();
         let mut pix_final = "#version 100\nprecision highp float;\n".to_string();
 
-        vtx_final.push_str("\n// Draw Uniforms\n");
-        vtx_final.push_str(&Shader::uniforms_def(&self.df_uniforms));
-       
-        pix_final.push_str("\n// Draw Uniforms\n");
-        pix_final.push_str(&Shader::uniforms_def(&self.df_uniforms));
-
-        vtx_final.push_str("\n// List Uniforms\n");
-        vtx_final.push_str(&Shader::uniforms_def(&self.list_uniforms));
-       
-        pix_final.push_str("\n// List Uniforms\n");
-        pix_final.push_str(&Shader::uniforms_def(&self.list_uniforms));
-
         vtx_final.push_str("\n// Cx Uniforms\n");
         vtx_final.push_str(&Shader::uniforms_def(&self.cx_uniforms));
        
         pix_final.push_str("\n// Cx Uniforms\n");
         pix_final.push_str(&Shader::uniforms_def(&self.cx_uniforms));
+
+        vtx_final.push_str("\n// DrawList Uniforms\n");
+        vtx_final.push_str(&Shader::uniforms_def(&self.dl_uniforms));
+       
+        pix_final.push_str("\n// DrawList Uniforms\n");
+        pix_final.push_str(&Shader::uniforms_def(&self.dl_uniforms));
+
+        vtx_final.push_str("\n// Draw Uniforms\n");
+        vtx_final.push_str(&Shader::uniforms_def(&self.dr_uniforms));
+       
+        pix_final.push_str("\n// Draw Uniforms\n");
+        pix_final.push_str(&Shader::uniforms_def(&self.dr_uniforms));
 
         // count slots
         let geom_slots:usize = self.geometries.iter().map(|v| v.kind.slots()).sum();
@@ -648,8 +654,7 @@ impl Shader{
     }
 
     pub fn def_df(&mut self){
-        
-       
+
         self.local("df_pos", Kind::Vec2);
         self.local("df_last_pos", Kind::Vec2);
         self.local("df_start_pos", Kind::Vec2);

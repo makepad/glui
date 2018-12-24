@@ -5,7 +5,9 @@ extern crate glutin;
 mod math;
 mod shader;
 mod context;
+mod font;
 mod rect;
+mod text;
 mod button;
 use crate::context::*;
 use crate::button::*;
@@ -44,7 +46,6 @@ impl App{
 
 fn main() {
     let mut cx = Cx{
-        running:true,
         title:"Hello World".to_string(),
         ..Default::default()
     };

@@ -2,11 +2,13 @@
 //use crate::shader::*;
 use crate::context::*;
 use crate::rect::*;
+use crate::text::*;
 
 pub struct Button{
     pub draw_cx:DrawCx,
     pub time:f32,
     pub bg: Rect,
+    pub text: Text,
     pub label:String,
     pub did_click: bool
 }
@@ -18,7 +20,8 @@ impl Style for Button{
             draw_cx:DrawCx{..Default::default()},
             label:"OK".to_string(),
             did_click:false,
-            bg:Rect{..Style::style(cx)}
+            bg:Rect{..Style::style(cx)},
+            text:Text{..Style::style(cx)}
         }
     }
 }
