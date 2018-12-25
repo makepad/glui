@@ -46,6 +46,23 @@ pub struct ShaderUniform{
     pub kind:Kind
 }
 
+#[derive(Clone)]
+pub enum Sampler{
+    Sampler2D,
+    Sampler3D
+}
+impl Default for Sampler{
+    fn default()->Self{
+        Sampler::Sampler2D
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct ShaderSampler{
+    pub name:String,
+    pub sampler:Sampler
+}
+
 #[derive(Default, Clone)]
 pub struct ShaderDef{
     pub name:String,
@@ -82,7 +99,7 @@ pub struct Shader{
     pub dr_uniforms:Vec<ShaderUniform>,
     pub dl_uniforms:Vec<ShaderUniform>,
     pub cx_uniforms:Vec<ShaderUniform>,
-    pub sampler2Ds:Vec<String>,
+    pub samplers:Vec<ShaderSampler>,
     pub methods:Vec<String>
 }
 
@@ -110,8 +127,13 @@ impl Shader{
         );
     }
 
-    pub fn sampler2D(&mut self, name:&str){
-        self.sampler2Ds.push(name.to_string());
+    pub fn sampler(&mut self, name:&str, sampler:Sampler){
+        self.samplers.push(
+            ShaderSampler{
+                sampler:sampler,
+                name:name.to_string()
+            }
+        );
     }
 
     pub fn instance(&mut self, name:&str, kind:Kind){
@@ -295,6 +317,18 @@ impl Shader{
             r.push_str(u.kind.name());
             r.push_str(" ");
             r.push_str(&u.name);
+            r.push_str(";\n");
+        }
+        r
+    }
+
+   fn samplers_def(samplers: &Vec<ShaderSampler> )->String{
+        // ok lets do a ceil
+        let mut r = "".to_string();
+        for s in samplers{
+            r.push_str("uniform sampler2D ");
+            r.push_str(" ");
+            r.push_str(&s.name);
             r.push_str(";\n");
         }
         r
@@ -517,6 +551,13 @@ impl Shader{
 
         let mut vtx_final = "#version 100\nprecision highp float;\n".to_string();
         let mut pix_final = "#version 100\nprecision highp float;\n".to_string();
+
+        vtx_final.push_str("\n// Samplers\n");
+        vtx_final.push_str(&Shader::samplers_def(&self.samplers));
+       
+        pix_final.push_str("\n// Samplers\n");
+        pix_final.push_str(&Shader::samplers_def(&self.samplers));
+
 
         vtx_final.push_str("\n// Cx Uniforms\n");
         vtx_final.push_str(&Shader::uniforms_def(&self.cx_uniforms));

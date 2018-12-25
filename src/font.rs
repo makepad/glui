@@ -12,10 +12,10 @@ pub struct Glyph{
     pub x2:f32,
     pub y2:f32,
     pub advance:f32,
-    pub tsingle:u32,
-    pub toffset:u32,
-    pub tw:u32,
-    pub th:u32,
+    pub tsingle:usize,
+    pub toffset:usize,
+    pub tw:usize,
+    pub th:usize,
     pub tx1:f32,
     pub ty1:f32,
     pub tx2:f32,
@@ -32,12 +32,12 @@ pub struct Kern{
 #[derive(Default, Clone)]
 pub struct Font{
     pub id:u32,
-    pub width:u32,
-    pub height:u32,
-    pub slots:u32,
-    pub rgbsize:u32,
-    pub onesize:u32,
-    pub kernsize:u32, 
+    pub width:usize,
+    pub height:usize,
+    pub slots:usize,
+    pub rgbsize:usize,
+    pub onesize:usize,
+    pub kernsize:usize, 
     pub glyphs:Vec<Glyph>,
     pub unicodes:HashMap<u32, u32>,
     pub kerntable:Vec<Kern>,
@@ -51,12 +51,12 @@ impl Font{
         
         let mut ff = Font{
             id: file.read_u32le(),
-            width: file.read_u16le() as u32,
-            height: file.read_u16le() as u32,
-            slots: file.read_u32le(),
-            rgbsize: file.read_u32le(),
-            onesize: file.read_u32le(),
-            kernsize:file.read_u32le(),
+            width: file.read_u16le() as usize,
+            height: file.read_u16le() as usize,
+            slots: file.read_u32le() as usize,
+            rgbsize: file.read_u32le() as usize,
+            onesize: file.read_u32le() as usize,
+            kernsize:file.read_u32le() as usize,
             ..Default::default()
         };
         
@@ -69,10 +69,10 @@ impl Font{
                 x2: file.read_f32le(),
                 y2: file.read_f32le(),
                 advance: file.read_f32le(),
-                tsingle: file.read_u32le(),
-                toffset: file.read_u32le(),
-                tw: file.read_u32le(),
-                th: file.read_u32le(),
+                tsingle: file.read_u32le() as usize,
+                toffset: file.read_u32le() as usize,
+                tw: file.read_u32le() as usize,
+                th: file.read_u32le() as usize,
                 tx1:0.0,
                 ty1:0.0,
                 tx2:0.0,
@@ -128,7 +128,7 @@ impl Font{
                 for y in 0..b.th{
                     for x in 0..b.tw{
                         let v = s_buf[ow as usize] as u32;
-                        ff.texture[ (x + ox + ((y + oy) * (ff.width as u32))) as usize] = (v<<16) | (v<<8) | v;
+                        ff.texture[ (x + ox + ((y + oy) * ff.width))] = (v<<16) | (v<<8) | v;
                         ow = ow + 1;
                     }
                 }
@@ -140,7 +140,7 @@ impl Font{
                         let r = r_buf[ow as usize] as u32;
                         let g = g_buf[ow as usize] as u32;
                         let b = b_buf[ow as usize] as u32;
-                        ff.texture[ (x + ox + ((y + oy) * (ff.width as u32))) as usize] = (r<<16) | (g<<8) | b;
+                        ff.texture[ (x + ox + ((y + oy) * ff.width))] = (r<<16) | (g<<8) | b;
                         ow = ow + 1;
                     }
                 }

@@ -45,8 +45,8 @@ impl Text{
 
         sh.geometry("pos", Kind::Vec2);
         
-        sh.sampler2D("font_sampler");
-        sh.uniform("font_texture_size", Kind::Vec2);
+        sh.sampler("font_sampler", Sampler::Sampler2D);
+        sh.uniform("font_size", Kind::Vec2);
 
         sh.instance("x1", Kind::Float);
         sh.instance("y1", Kind::Float);
@@ -56,18 +56,20 @@ impl Text{
         sh.instance("ty1", Kind::Float);
         sh.instance("tx2", Kind::Float);
         sh.instance("ty2", Kind::Float);
-
-        // this allocates a uniform slot ID in the call buffer
-        
         sh.instancev("color", Kind::Vec4);
+        
+        sh.varying("tex_coord", Kind::Vec2);
+
         sh.method("
             vec4 pixel(){
-                return color*fac;
+               // return vec4(1.0,1.0,0.0,1.0);
+                return texture2D(font_sampler, tex_coord);
             }
         ");
         sh.method("
             vec4 vertex(){
-                return vec4(pos*vec2(w, h)+vec2(x, y),0.,1.);
+                tex_coord = pos;
+                return vec4(pos,0.,1.);
             }
         ");
         sh.log =1;
@@ -75,12 +77,22 @@ impl Text{
 
     pub fn draw_text(&mut self, cx:&mut Cx, text:&str){
         let dr = cx.drawing.instance(cx.shaders.get(self.shader_id));
-        let font = cx.fonts.get(self.font_id);
+        let font = cx.fonts.get(self.font_id, &mut cx.textures);
 
         if dr.first{
-            dr.ufloat("fac", 0.1);
-            dr.usampler2D("font_sampler", font.texture_id);
+            dr.usampler("font_sampler", font.texture_id);
+            dr.uvec2f("font_size", font.width as f32, font.height as f32);
         }
+
+        dr.float("x1",0.);
+        dr.float("y1",0.);
+        dr.float("x2",0.);
+        dr.float("y2",0.);
+        dr.float("tx1",0.);
+        dr.float("ty1",0.);
+        dr.float("tx2",0.);
+        dr.float("ty2",0.);
+        dr.vec4f("color",1.0,1.0,1.0,1.0);
 
     }
 }
