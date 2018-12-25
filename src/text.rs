@@ -1,6 +1,6 @@
 use crate::math::*;
 use crate::shader::*;
-use crate::context::*;
+use crate::cx::*;
 
 pub struct Text{
     pub font_id:usize,
@@ -15,9 +15,9 @@ pub struct Text{
 impl Style for Text{
     fn style(cx:&mut Cx)->Self{
         let mut sh = Shader::def(); 
-        Self::def_shader(cx, &mut sh);
+        Self::def_shader(&mut sh);
         Self{
-            shader_id:0,//cx.shaders.add(sh),
+            shader_id:cx.shaders.add(sh),
             font_id:cx.fonts.load("ubuntu_regular_256.font"),
             text:"".to_string(),
             x:0.0,
@@ -29,9 +29,9 @@ impl Style for Text{
 }
 
 impl Text{
-    pub fn def_shader(cx: &mut Cx, sh: &mut Shader){
+    pub fn def_shader(sh: &mut Shader){
         // lets add the draw shader lib
-        CxShaders::def(sh);
+        Cx::def_shader(sh);
         sh.geometry_vertices = vec![
             0.0,0.0,
             1.0,0.0,
@@ -73,6 +73,14 @@ impl Text{
         sh.log =1;
     }
 
-   // pub fn draw_text(&mut self, cx:&mut Cx, text:&str)->InstanceWriter{
-   // }
+    pub fn draw_text(&mut self, cx:&mut Cx, text:&str){
+        let dr = cx.drawing.instance(cx.shaders.get(self.shader_id));
+        let font = cx.fonts.get(self.font_id);
+
+        if dr.first{
+            dr.ufloat("fac", 0.1);
+            dr.usampler2D("font_sampler", font.texture_id);
+        }
+
+    }
 }

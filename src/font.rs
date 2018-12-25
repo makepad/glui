@@ -37,9 +37,9 @@ pub struct Font{
     pub slots:u32,
     pub rgbsize:u32,
     pub onesize:u32,
-    pub kernsize:u32,
+    pub kernsize:u32, 
     pub glyphs:Vec<Glyph>,
-    pub unicodes:HashMap<u32,u32>,
+    pub unicodes:HashMap<u32, u32>,
     pub kerntable:Vec<Kern>,
     pub texture:Vec<u32>,
     pub texture_id:usize

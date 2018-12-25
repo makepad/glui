@@ -4,24 +4,31 @@ extern crate glutin;
 
 mod math;
 mod shader;
-mod context;
+
+mod cx; 
+mod cxdrawing;
+mod cxshaders;
+mod cxtextures;
+mod cxfonts;
+
 mod font;
 mod rect;
 mod text;
 mod button;
-use crate::context::*;
+
+use crate::cx::*;
 use crate::button::*;
 
 struct App{
-    draw_cx:DrawCx,
-    ok_button:Button
+    dn:DrawNode,
+    ok:Button
 }
 
 impl Style for App{
     fn style(cx:&mut Cx)->Self{
         Self{
-            draw_cx:DrawCx{..Default::default()},
-            ok_button:Button{
+            dn:DrawNode{..Default::default()},
+            ok:Button{
                 ..Style::style(cx)
             }
         }
@@ -30,17 +37,17 @@ impl Style for App{
 
 impl App{
     fn handle(&mut self, cx:&mut Cx, ev:&Ev){
-        if self.ok_button.handle_click(cx, ev){
+        if self.ok.handle_click(cx, ev){
             // do something!
         }
     }
 
     fn draw(&mut self, cx:&mut Cx){
-        self.draw_cx.begin(cx);
+        self.dn.begin(cx);
 
-        self.ok_button.draw_with_label(cx, "OK");
+        self.ok.draw_with_label(cx, "OK");
 
-        self.draw_cx.end(cx);
+        self.dn.end(cx);
     }
 }
 

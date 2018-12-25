@@ -1,11 +1,11 @@
 //use crate::math::*;
 //use crate::shader::*;
-use crate::context::*;
+use crate::cx::*;
 use crate::rect::*;
 use crate::text::*;
 
 pub struct Button{
-    pub draw_cx:DrawCx,
+    pub dn:DrawNode,
     pub time:f32,
     pub bg: Rect,
     pub text: Text,
@@ -17,7 +17,7 @@ impl Style for Button{
     fn style(cx:&mut Cx)->Self{
         Self{
             time:0.0,
-            draw_cx:DrawCx{..Default::default()},
+            dn:DrawNode{..Default::default()},
             label:"OK".to_string(),
             did_click:false,
             bg:Rect{..Style::style(cx)},
@@ -41,7 +41,7 @@ impl Button{
     }
 
     pub fn draw_with_label(&mut self, cx:&mut Cx, _label: &str){
-        self.draw_cx.begin(cx);
+        self.dn.begin(cx);
         self.time = self.time + 0.01;
         for i in 0..200000{
             self.bg.color.x = 0.5+0.5*f32::sin(i as f32 / 10.0+self.time);
@@ -53,6 +53,6 @@ impl Button{
                 0.01, 0.01);
         }
 
-        self.draw_cx.end(cx);
+        self.dn.end(cx);
     }
 }

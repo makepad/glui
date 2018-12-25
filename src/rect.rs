@@ -1,6 +1,7 @@
 use crate::math::*;
 use crate::shader::*;
-use crate::context::*;
+use crate::cx::*;
+use crate::cxdrawing::*;
 
 pub struct Rect{
     pub shader_id:usize,
@@ -15,7 +16,7 @@ pub struct Rect{
 impl Style for Rect{
     fn style(cx:&mut Cx)->Self{
         let mut sh = Shader::def(); 
-        Self::def_shader(cx, &mut sh);
+        Self::def_shader(&mut sh);
         Self{
             shader_id:cx.shaders.add(sh),
             id:0,
@@ -29,9 +30,9 @@ impl Style for Rect{
 }
 
 impl Rect{
-    pub fn def_shader(cx: &mut Cx, sh: &mut Shader){
+    pub fn def_shader(sh: &mut Shader){
         // lets add the draw shader lib
-        CxShaders::def(sh);
+        Cx::def_shader(sh);
 
         sh.geometry_vertices = vec![
             0.0,0.0,
@@ -44,14 +45,15 @@ impl Rect{
             2,3,0
         ];
         sh.geometry("pos", Kind::Vec2);
+
+        sh.uniform("fac", Kind::Float);
+
         sh.instance("x", Kind::Float);
         sh.instance("y", Kind::Float);
         sh.instance("w", Kind::Float);
         sh.instance("h", Kind::Float);
-        // this allocates a uniform slot ID in the call buffer
-        sh.uniform("fac", Kind::Float);
-        
         sh.instancev("color", Kind::Vec4);
+
         sh.method("
             vec4 pixel(){
                 return color*fac;
