@@ -1,19 +1,25 @@
 use glutin::dpi::*;
 use glutin::GlContext;
+use glutin::Api;
+use glutin::GlRequest;
+use glutin::GlProfile;
 use std::mem;
 use std::ptr;
+use std::ffi::CStr;
 
 use crate::shader::*;
 use crate::cxdrawing::*;
 use crate::cxshaders::*;
 use crate::cxfonts::*;
 use crate::cxtextures::*;
+use crate::cxturtle::*;
 
 #[derive(Clone)]
 pub struct Cx{
     pub title:String,
     pub running:bool,
 
+    pub turtle:CxTurtle,
     pub shaders:CxShaders,
     pub drawing:CxDrawing,
     pub fonts:CxFonts,
@@ -22,19 +28,12 @@ pub struct Cx{
     pub uniforms:Vec<f32>
 }
 
-pub enum Ev{
-    Redraw,
-    Animate,
-    FingerMove{x:f32, y:f32},
-    FingerDown{x:f32, y:f32},
-    FingerUp{x:f32, y:f32},
-}
-
 impl Default for Cx{
     fn default()->Self{
         let mut uniforms = Vec::<f32>::new();
         uniforms.resize(CX_UNI_SIZE, 0.0);
         Self{
+            turtle:CxTurtle{..Default::default()},
             fonts:CxFonts{..Default::default()},
             drawing:CxDrawing{..Default::default()},
             shaders:CxShaders{..Default::default()},
@@ -91,7 +90,7 @@ impl Cx{
                 unsafe{
                     gl::UseProgram(shgl.program);
                     gl::BindVertexArray(draw.vao.vao);
-                    let instances = draw.instance.len() / shgl.compiled_shader.inst_slots;
+                    let instances = draw.instance.len() / shgl.assembled_shader.inst_slots;
                     let indices = sh.geometry_indices.len();
 
                     CxShaders::set_uniform_buffer_fallback(&shgl.cx_uniforms, &self.uniforms);
@@ -104,23 +103,42 @@ impl Cx{
         }
     }
 
+    pub unsafe fn gl_string(raw_string: *const gl::types::GLubyte) -> String {
+        if raw_string.is_null() { return "(NULL)".into() }
+        String::from_utf8(CStr::from_ptr(raw_string as *const _).to_bytes().to_vec()).ok()
+                                    .expect("gl_string: non-UTF8 string")
+    }
+
     pub fn event_loop<F>(&mut self, mut callback:F)
     where F: FnMut(&mut Cx, Ev),
     { 
+        let gl_request = GlRequest::Latest;
+        let gl_profile = GlProfile::Core;
+
         let mut events_loop = glutin::EventsLoop::new();
         let window = glutin::WindowBuilder::new()
             .with_title(self.title.clone())
             .with_dimensions(LogicalSize::new(640.0, 480.0));
         let context = glutin::ContextBuilder::new()
-            .with_vsync(true);
+            .with_vsync(true)
+            .with_gl(gl_request)
+            .with_gl_profile(gl_profile);
         let gl_window = glutin::GlWindow::new(window, context, &events_loop).unwrap();
-        
+
         unsafe {
             gl_window.make_current().unwrap();
             gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Enable(gl::DEPTH_TEST);
-            gl::DepthFunc(gl::LESS);            
+            gl::DepthFunc(gl::LESS);
+
+            let mut num_extensions = 0;
+            gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_extensions);
+            let extensions: Vec<_> = (0 .. num_extensions).map(|num| {
+               Cx::gl_string(gl::GetStringi(gl::EXTENSIONS, num as gl::types::GLuint))
+            }).collect();
+            println!("Extensions   : {}", extensions.join(", "))
+
         }
 
         // lets compile all shaders
@@ -154,79 +172,4 @@ impl Cx{
         }
     }
 
-}
-
-pub trait Style{
-    fn style(cx:&mut Cx) -> Self;
-}
-
-#[derive(Default,Clone)]
-pub struct DrawNode{ // draw info per UI element
-    pub id:usize,
-    pub x:f32,
-    pub y:f32,
-    pub w:f32,
-    pub h:f32,
-    pub frame_id:usize,
-    pub initialized:bool,
-    // the set of shader_id + 
-    pub draw_list_id:usize 
-}
-
-impl DrawNode{
-    pub fn begin(&mut self, cx:&mut Cx){
-        if !self.initialized{ // draw node needs initialization
-            if cx.drawing.draw_lists_free.len() != 0{
-                self.draw_list_id = cx.drawing.draw_lists_free.pop().unwrap();
-            }
-            else{
-                self.draw_list_id = cx.drawing.draw_lists.len();
-                cx.drawing.draw_lists.push(DrawList{..Default::default()});
-            }
-            self.initialized = true;
-            let draw_list = &mut cx.drawing.draw_lists[self.draw_list_id];
-            draw_list.initialize();
-        }
-        else{
-            // set len to 0
-            let draw_list = &mut cx.drawing.draw_lists[self.draw_list_id];
-            draw_list.draws_len = 0;
-        }
-        // push ourselves up the parent draw_stack
-        if let Some(parent_draw) = cx.drawing.draw_node_stack.last(){
-
-            // we need a new draw
-            let parent_draw_list = &mut cx.drawing.draw_lists[parent_draw.draw_list_id];
-
-            let id = parent_draw_list.draws_len;
-            parent_draw_list.draws_len = parent_draw_list.draws_len + 1;
-            
-            // see if we need to add a new one
-            if parent_draw_list.draws_len > parent_draw_list.draws.len(){
-                parent_draw_list.draws.push({
-                    Draw{
-                        sub_list_id:self.draw_list_id,
-                        ..Default::default()
-                    }
-                })
-            }
-            else{// or reuse a sub list node
-                let draw = &mut parent_draw_list.draws[id];
-                if draw.sub_list_id == 0{ // we used to be a drawcmd
-                    CxShaders::destroy_vao(&mut draw.vao);
-                    draw.sub_list_id = self.draw_list_id;
-                }
-                else{ // used to be a sublist
-                    draw.sub_list_id = self.draw_list_id;
-                }
-            }
-        }
-
-        cx.drawing.draw_list_id = self.draw_list_id;
-        cx.drawing.draw_node_stack.push(self.clone());
-    }
-
-    pub fn end(&mut self, cx:&mut Cx){
-        cx.drawing.draw_node_stack.pop();
-    }
 }

@@ -2,14 +2,24 @@
 extern crate gl;
 extern crate glutin;
 
+// renderer specific modules
+#[cfg(feature = "ogl")]
+#[path="cx_ogl.rs"]
+mod cx; 
+#[cfg(feature = "ogl")]
+#[path="cxshaders_ogl.rs"]
+mod cxshaders; 
+#[cfg(feature = "ogl")]
+#[path="cxtextures_ogl.rs"]
+mod cxtextures;
+
+// shared modules
+mod cxdrawing;
+mod cxfonts;
+mod cxturtle;
+
 mod math;
 mod shader;
-
-mod cx; 
-mod cxdrawing;
-mod cxshaders;
-mod cxtextures;
-mod cxfonts;
 
 mod font;
 mod rect;
@@ -17,6 +27,7 @@ mod text;
 mod button;
 
 use crate::cx::*;
+use crate::cxdrawing::*;
 use crate::button::*;
 
 struct App{
@@ -53,7 +64,7 @@ impl App{
 
 fn main() {
     let mut cx = Cx{
-        title:"Hello World".to_string(),
+        title:"HALLO World".to_string(),
         ..Default::default()
     };
 

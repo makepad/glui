@@ -31,7 +31,7 @@ pub struct Kern{
 
 #[derive(Default, Clone)]
 pub struct Font{
-    pub id:u32,
+    pub id:u32,   
     pub width:usize,
     pub height:usize,
     pub slots:usize,
@@ -39,7 +39,7 @@ pub struct Font{
     pub onesize:usize,
     pub kernsize:usize, 
     pub glyphs:Vec<Glyph>,
-    pub unicodes:HashMap<u32, u32>,
+    pub unicodes:Vec<usize>,
     pub kerntable:Vec<Kern>,
     pub texture:Vec<u32>,
     pub texture_id:usize
@@ -59,7 +59,8 @@ impl Font{
             kernsize:file.read_u32le() as usize,
             ..Default::default()
         };
-        
+        ff.unicodes.resize(65535, 0);
+
         ff.glyphs.reserve(ff.slots as usize);
         for i in 0..(ff.slots as usize){
             ff.glyphs.push(Glyph{
@@ -148,8 +149,9 @@ impl Font{
             b.tx1 = (ox as f32) / (ff.width as f32);
             b.ty1 = ((oy+b.th) as f32) / (ff.height as f32);
             b.tx2 = ((ox+b.tw) as f32) / (ff.width as f32);
-            b.ty1 = (oy as f32) / (ff.height as f32);
-            ff.unicodes.insert(b.unicode, i as  u32);
+            b.ty2 = (oy as f32) / (ff.height as f32);
+            ff.unicodes[b.unicode as usize] = i as usize;
+            //ff.unicodes.insert(b.unicode, i as  u32);
             ox += b.tw+1;
         }
 

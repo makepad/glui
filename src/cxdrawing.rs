@@ -3,6 +3,14 @@ use crate::shader::*;
 use crate::cx::*;
 use crate::cxshaders::*;
 
+pub enum Ev{
+    Redraw,
+    Animate,
+    FingerMove{x:f32, y:f32},
+    FingerDown{x:f32, y:f32},
+    FingerUp{x:f32, y:f32},
+}
+
 #[derive(Clone, Default)]
 pub struct CxDrawing{
     pub draw_lists: Vec<DrawList>,
@@ -205,5 +213,83 @@ impl DrawList{
 
     pub fn uniform_prop2(&mut self, v:f32){
         self.uniforms[DL_UNI_PROP2] = v;
+    }
+}
+
+pub trait Style{
+    fn style(cx:&mut Cx) -> Self;
+}
+
+#[derive(Default,Clone)]
+pub struct DrawNode{ // draw info per UI element
+    pub id:usize,
+    pub x:f32,
+    pub y:f32,
+    pub w:f32,
+    pub h:f32,
+    pub frame_id:usize,
+    pub initialized:bool,
+    // the set of shader_id + 
+    pub draw_list_id:usize 
+}
+
+impl DrawNode{
+    pub fn begin(&mut self, cx:&mut Cx){
+        if !self.initialized{ // draw node needs initialization
+            if cx.drawing.draw_lists_free.len() != 0{
+                self.draw_list_id = cx.drawing.draw_lists_free.pop().unwrap();
+            }
+            else{
+                self.draw_list_id = cx.drawing.draw_lists.len();
+                cx.drawing.draw_lists.push(DrawList{..Default::default()});
+            }
+            self.initialized = true;
+            let draw_list = &mut cx.drawing.draw_lists[self.draw_list_id];
+            draw_list.initialize();
+        }
+        else{
+            // set len to 0
+            let draw_list = &mut cx.drawing.draw_lists[self.draw_list_id];
+            draw_list.draws_len = 0;
+        }
+        // push ourselves up the parent draw_stack
+        if let Some(parent_draw) = cx.drawing.draw_node_stack.last(){
+
+            // we need a new draw
+            let parent_draw_list = &mut cx.drawing.draw_lists[parent_draw.draw_list_id];
+
+            let id = parent_draw_list.draws_len;
+            parent_draw_list.draws_len = parent_draw_list.draws_len + 1;
+            
+            // see if we need to add a new one
+            if parent_draw_list.draws_len > parent_draw_list.draws.len(){
+                parent_draw_list.draws.push({
+                    Draw{
+                        sub_list_id:self.draw_list_id,
+                        ..Default::default()
+                    }
+                })
+            }
+            else{// or reuse a sub list node
+                let draw = &mut parent_draw_list.draws[id];
+                if draw.sub_list_id == 0{ // we used to be a drawcmd
+                    CxShaders::destroy_vao(&mut draw.vao);
+                    draw.sub_list_id = self.draw_list_id;
+                }
+                else{ // used to be a sublist
+                    draw.sub_list_id = self.draw_list_id;
+                }
+            }
+        }
+
+        cx.drawing.draw_list_id = self.draw_list_id;
+        cx.drawing.draw_node_stack.push(self.clone());
+
+        cx.turtle.x = 0.0;
+        cx.turtle.y = 0.0;
+    }
+
+    pub fn end(&mut self, cx:&mut Cx){
+        cx.drawing.draw_node_stack.pop();
     }
 }

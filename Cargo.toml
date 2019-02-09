@@ -1,3 +1,7 @@
+[features]
+default = ["ogl"]
+ogl = []
+
 [package]
 name = "glwindow"
 version = "0.1.0"

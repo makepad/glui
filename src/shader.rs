@@ -1,4 +1,4 @@
-#[derive(Clone,PartialEq)]
+#[derive(Clone,PartialEq, Debug)]
 pub enum Kind{
     Float,
     Vec2,
@@ -34,10 +34,16 @@ impl Kind{
     }    
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct ShaderVar{
     pub name:String,
     pub kind:Kind
+}
+
+impl PartialEq for ShaderVar{
+    fn eq(&self, other: &ShaderVar) -> bool {
+        self.name == other.name
+    }
 }
 
 #[derive(Default, Clone)]
@@ -229,6 +235,22 @@ impl Shader{
         None
     }
 
+    pub fn gather_locals(&self, deps:&Vec<String>, locals:&mut Vec<ShaderVar>){
+        for dep in deps{
+            let sm = self.find_method(dep);
+            if let Some(sm) = sm{ 
+                // lets find all the locals in sm
+                for local in &self.locals{
+                    
+                    if sm.contains(&local.name) && !locals.contains(local){
+                        locals.push(local.clone());
+                    }
+                }
+            }
+        }
+        println!("{:?}", locals);
+    }
+
     pub fn gather_deps(&self, body:&str, deps:&mut Vec<String>){
         let mut scan = Vec::<char>::new();
         for (i, c) in body.chars().enumerate() {
@@ -258,6 +280,14 @@ impl Shader{
             let m = self.find_method(dep).unwrap();
             r.push_str(&m);
             r.push_str("\n");
+        }
+        r
+    }
+
+    fn locals_def(locals:&Vec<ShaderVar>)->String{
+         let mut r = "".to_string();
+        for local in locals{
+            r.push_str(&Shader::variable_gl_def(local));
         }
         r
     }
@@ -292,7 +322,7 @@ impl Shader{
             "vec4".to_string()
         }
     }
-
+    
     fn variable_def(thing: &str, base: &str, slots:usize)->String{
         // ok lets do a ceil
         let mut r = "".to_string();
@@ -549,8 +579,15 @@ impl Shader{
         pix_deps.push("pixel".to_string());
         self.gather_deps(&pix_method, &mut pix_deps);
 
+        let mut vtx_locals = Vec::new();
+        self.gather_locals(&vtx_deps, &mut vtx_locals);
+        
+        let mut pix_locals = Vec::new();
+        self.gather_locals(&pix_deps, &mut pix_locals);
+        
+
         let mut vtx_final = "#version 100\nprecision highp float;\n".to_string();
-        let mut pix_final = "#version 100\nprecision highp float;\n".to_string();
+        let mut pix_final = "#version 100\n#extension GL_OES_standard_derivatives : enable\nprecision highp float;\n".to_string();
 
         vtx_final.push_str("\n// Samplers\n");
         vtx_final.push_str(&Shader::samplers_def(&self.samplers));
@@ -594,6 +631,13 @@ impl Shader{
         vtx_final.push_str("\n// Varyings\n");
         vtx_final.push_str(&Shader::variable_def("varying", "varying", vary_slots));
        
+        pix_final.push_str("\n// Locals\n");
+        pix_final.push_str(&Shader::locals_def(&pix_locals));
+        
+        vtx_final.push_str("\n// Locals\n");
+        vtx_final.push_str(&Shader::locals_def(&vtx_locals));
+
+
         let mut vtx_main = "void main(){\n".to_string();
         let mut pix_main = "void main(){\n".to_string();
 
@@ -697,24 +741,26 @@ impl Shader{
     pub fn def_df(&mut self){
 
         self.local("df_pos", Kind::Vec2);
+        self.local("df_result", Kind::Vec4);
         self.local("df_last_pos", Kind::Vec2);
         self.local("df_start_pos", Kind::Vec2);
         self.local("df_shape", Kind::Float);
-        self.local("df_shape_old", Kind::Float);
+        self.local("df_old_shape", Kind::Float);
         self.local("df_blur", Kind::Float);
-        self.local("df_antialias", Kind::Float);
+        self.local("df_aa", Kind::Float);
         self.local("df_scale", Kind::Float);
         self.local("df_field", Kind::Float);
         self.method("
             vec2 df_viewport(vec2 pos){
                 df_pos = pos;
                 df_result = vec4(0.);
-                df_shape_old =
+                df_old_shape =
                 df_shape = 1e+20;
                 df_blur = 0.00001;
                 df_aa = df_antialias(pos);
                 df_scale = 1.0;
                 df_field = 0.0;
+                return df_pos;
             }
         ");
         self.method("
@@ -747,7 +793,7 @@ impl Shader{
             }
         ");
         self.method(
-            "void df_calc_blur(float w) {
+            "float df_calc_blur(float w) {
                 float f = w - df_blur;
                 float wa = clamp(-w * df_aa, 0., 1.);
                 float wb = df_blur < 0.0001?1.0:clamp(-w / df_blur, 0., 1.);
@@ -757,15 +803,16 @@ impl Shader{
         self.method("
             void df_fill_keep(vec4 color) {
                 float f = df_calc_blur(df_shape);
-                float source = vec4(color.rgb * color.a, color.a);
-                float dest = df_result;
+                vec4 source = vec4(color.rgb * color.a, color.a);
+                vec4 dest = df_result;
                 df_result = source * f + dest * (1. - source.a * f);
             }
         ");
         self.method("
-            void df_fill(vec4 color) {
+            vec4 df_fill(vec4 color) {
                 df_fill_keep(color);
                 df_old_shape = df_shape = 1e+20;
+                return df_result;
             }
         ");
         self.method("
@@ -777,9 +824,10 @@ impl Shader{
             }
         ");
         self.method("
-            void df_stroke(vec4 color, float width) {
+            vec4 df_stroke(vec4 color, float width) {
                 df_stroke_keep(color, width);
                 df_old_shape = df_shape = 1e+20;
+                return df_result;
             }
         ");
         self.method("

@@ -43,7 +43,7 @@ impl CxTextures{
             }
             gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_BYTE, v.as_ptr() as *const _);
             gl::BindTexture(gl::TEXTURE_2D, 0);
-        }        
+        }
         let id = self.textures.len();
         self.textures.push(
             GLTexture{
