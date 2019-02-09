@@ -9,7 +9,8 @@ authors = ["arc"]
 edition = "2018"
 
 [dependencies]
+shader_ast = {path="./shader_ast"}
 glutin = "*"
-gl = "*"
+gl = "*" 
 rand = "*"
 scoped_threadpool = "*"

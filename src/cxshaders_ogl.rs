@@ -1,9 +1,7 @@
 use std::mem;
 use std::ptr;
 
-use crate::math::*;
 use crate::shader::*;
-use crate::cx::*;
 use crate::cxtextures::*;
 use crate::cxdrawing::*;
 
@@ -224,7 +222,6 @@ impl CxShaders{
                 }
             }
         }
-        println!("{:?}", locals);
     }
 
     pub fn gather_deps(sh:&Shader, body:&str, deps:&mut Vec<String>){

@@ -64,7 +64,7 @@ impl Rect{
                 return vec4(pos*vec2(w, h)+vec2(x, y),0.,1.);
             }
         ");
-        sh.log =1;
+        //sh.log =1;
     }
 
     pub fn draw_at<'a>(&mut self, cx:&'a mut Cx, x:f32, y:f32, w:f32, h:f32)->&'a mut Draw{

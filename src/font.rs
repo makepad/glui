@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::collections::HashMap;
 use std::mem;
 
 #[derive(Default, Clone)]
@@ -62,7 +61,7 @@ impl Font{
         ff.unicodes.resize(65535, 0);
 
         ff.glyphs.reserve(ff.slots as usize);
-        for i in 0..(ff.slots as usize){
+        for _i in 0..(ff.slots as usize){
             ff.glyphs.push(Glyph{
                 unicode: file.read_u32le(),
                 x1: file.read_f32le(),
@@ -82,7 +81,7 @@ impl Font{
         }
         // read the kerning table
         ff.kerntable.reserve(ff.kernsize as usize);
-        for i in 0..(ff.kernsize){
+        for _i in 0..(ff.kernsize){
             ff.kerntable.push(Kern{
                 i: file.read_u32le(),
                 j: file.read_u32le(),
@@ -103,7 +102,7 @@ impl Font{
 
         ff.texture.resize((ff.width * ff.height) as usize, 0);
         // ok lets read the different buffers
-        let result = file.read(r_buf.as_mut_slice())?;
+        file.read(r_buf.as_mut_slice())?;
         file.read(g_buf.as_mut_slice())?;
         file.read(b_buf.as_mut_slice())?;
         file.read(s_buf.as_mut_slice())?;
@@ -164,21 +163,21 @@ trait ReadBytes : Read{
 
     fn read_u16le(&mut self) -> u16 {
         let mut x = [0;2];
-        self.read(&mut x);
+        self.read(&mut x).unwrap();
         let ret = (x[0] as u16) | (x[1] as u16) << 8;
         ret
     }
 
     fn read_u32le(&mut self) -> u32 {
         let mut x = [0;4];
-        self.read(&mut x);
+        self.read(&mut x).unwrap();
         let ret = (x[0] as u32) | ((x[1] as u32) << 8) | ((x[2] as u32) << 16) | ((x[3] as u32) << 24);
         ret
     }
 
     fn read_f32le(&mut self) -> f32 {
         let mut x = [0;4];
-        self.read(&mut x);
+        self.read(&mut x).unwrap();
         let ret = (x[0] as u32) | ((x[1] as u32) << 8) | ((x[2] as u32) << 16) | ((x[3] as u32) << 24);
         unsafe{
             let ret:f32 = mem::transmute(ret);

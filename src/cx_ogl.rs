@@ -1,6 +1,5 @@
 use glutin::dpi::*;
 use glutin::GlContext;
-use glutin::Api;
 use glutin::GlRequest;
 use glutin::GlProfile;
 use std::mem;
@@ -132,12 +131,12 @@ impl Cx{
             gl::Enable(gl::DEPTH_TEST);
             gl::DepthFunc(gl::LESS);
 
-            let mut num_extensions = 0;
-            gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_extensions);
-            let extensions: Vec<_> = (0 .. num_extensions).map(|num| {
-               Cx::gl_string(gl::GetStringi(gl::EXTENSIONS, num as gl::types::GLuint))
-            }).collect();
-            println!("Extensions   : {}", extensions.join(", "))
+            //let mut num_extensions = 0;
+            //gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_extensions);
+            //let extensions: Vec<_> = (0 .. num_extensions).map(|num| {
+            //   Cx::gl_string(gl::GetStringi(gl::EXTENSIONS, num as gl::types::GLuint))
+            //}).collect();
+            //println!("Extensions   : {}", extensions.join(", "))
 
         }
 

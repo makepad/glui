@@ -1,6 +1,4 @@
 #![allow(dead_code)]
-extern crate gl;
-extern crate glutin;
 
 // renderer specific modules
 #[cfg(feature = "ogl")]

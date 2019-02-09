@@ -23,7 +23,7 @@ impl CxTextures{
     }
 
     pub fn add_2d_static(&mut self, filter:Filter, v:&Vec<u32>, width:usize, height:usize)->usize{
-        let id = self.textures.len();
+        //let id = self.textures.len();
         let mut tex_handle;
         unsafe{
             tex_handle = mem::uninitialized();

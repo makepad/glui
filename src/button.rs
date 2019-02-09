@@ -3,7 +3,6 @@
 use crate::cx::*;
 use crate::cxdrawing::*;
 use crate::rect::*;
-use crate::text::*;
 
 pub struct Button{
     pub dn:DrawNode,
