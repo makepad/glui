@@ -8,7 +8,7 @@ use proc_macro2::Span;
 use syn::{
     Expr, Type, Pat, Stmt, PathArguments, GenericArgument, 
     Item, Local, ItemFn, ItemConst, ItemStruct,
-    Lit
+    Lit, Block, FnArg, BinOp, UnOp, Ident, ReturnType, Member
 };
 use quote::quote;
 use quote::quote_spanned;
@@ -78,20 +78,216 @@ fn process_var_def(stmt:Local)->TokenStream{
     }
 }
 
-fn process_fn_def(_item:ItemFn)->TokenStream{
+fn process_fn_def(item:ItemFn)->TokenStream{
     // alright lets do a function
     // and then incrementally add all supported ast nodes
-    
+    let name = item.ident.to_string();
+       let mut args = Vec::new();
+    // lets process the fnargs
+    for arg in &item.decl.inputs{
+        if let FnArg::Captured(arg) = arg{
+            // lets look at pat and ty
+            if let Pat::Ident(pat) = &arg.pat{
+                let name =  pat.ident.to_string();
+                let tyc;
+                if let Type::Path(typath) = &arg.ty{
+                    if typath.path.segments.len() != 1{
+                        return error(typath.span(), "arg type not simple");
+                    }
+                    let seg = &typath.path.segments[0];
+                    tyc = seg.ident.to_string();
+                }
+                else{
+                    return error(arg.span(), "arg type not simple");
+                }
+                args.push(quote!{
+                    ShFnArg{
+                        name:#name.to_string(),
+                        ty:#tyc.to_string()
+                    }
+                })
+            }
+            else{
+                return error(arg.span(), "arg pattern not simple identifier")
+            }
+        }
+        else{
+             return error(arg.span(), "arg pattern not simple identifier")
+        }
+    }
+    let rtype;
+    if let ReturnType::Type(_, ty) = item.decl.output{
+        if let Type::Path(typath) = *ty{
+            if typath.path.segments.len() != 1{
+                return error(typath.span(), "return type not simple");
+            }
+            let seg = &typath.path.segments[0];
+            rtype = seg.ident.to_string();
+        }
+        else{
+            return error(ty.span(), "return type not simple");
+        }
+    }   
+    else{
+        return error(item.span(), "function needs to specify return type")
+    }
+    let block = process_block(*item.block);
+    quote!{
+        ShFn{
+            name:#name.to_string(),
+            args:vec![#(#args),*],
+            ret:#rtype.to_string(),
+            block:#block
+        }
+    }
+}
+
+fn process_let(local:Local)->TokenStream{
+    // lets define a local with storage specified
+    if let Pat::Ident(pat) = &local.pats[0]{
+        let name =  pat.ident.to_string();
+        let tyc;
+        if let Some((_tok, ty)) = local.ty.clone(){
+            if let Type::Path(typath) = *ty{
+                if typath.path.segments.len() != 1{
+                    return error(typath.span(), "type not simple");
+                }
+                let seg = &typath.path.segments[0];
+                tyc = seg.ident.to_string();
+            }
+            else{
+                return error(local.span(), "type missing or malformed");
+            }
+        }
+        else{
+            return error(local.span(), "let pattern misses type info");
+        }
+        let init;
+        if let Some((_,local_init)) = local.init{
+            init = process_expr(*local_init);
+        }
+        else{
+            return error(local.span(), "let pattern misses initializer");
+        }
+        return quote!{
+            ShLet{
+                name:#name.to_string(),
+                ty:#tyc.to_string(),
+                init:Box::new(#init)
+            }
+        }
+    }
+    else{
+        return error(local.span(), "let pattern not simple identifier")
+    }
+}
+
+fn process_block(block:Block)->TokenStream{
+    let mut stmts = Vec::new();
+    for stmt in block.stmts{
+        match stmt{
+            Stmt::Local(stmt)=>{
+                let letstmt = process_let(stmt);
+                stmts.push(quote!{
+                    ShStmt::ShLet(#letstmt)
+                })
+            }
+            Stmt::Item(stmt)=>{
+                return error(stmt.span(), "Shader functions don't support items");
+            }
+            Stmt::Expr(stmt)=>{
+                let expr = process_expr(stmt);
+                stmts.push(quote!{
+                    ShStmt::ShExpr(#expr)
+                })
+            }
+            Stmt::Semi(stmt, _tok)=>{
+                let expr = process_expr(stmt);
+                stmts.push(quote!{
+                    ShStmt::ShSemi(#expr)
+                })
+            }
+        }
+    }
+    return quote!{
+        ShBlock{
+            stmts:vec![#(Box::new(#stmts)),*]
+        }
+    }
+}
+
+fn get_binop(op:BinOp)->&'static str{
+    match op{
+        BinOp::Add(_)=>"Add",
+        BinOp::Sub(_)=>"Sub",
+        BinOp::Mul(_)=>"Mul",
+        BinOp::Div(_)=>"Div",
+        BinOp::Rem(_)=>"Rem",
+        BinOp::And(_)=>"And",
+        BinOp::Or(_)=>"Or",
+        BinOp::BitXor(_)=>"BitXor",
+        BinOp::BitAnd(_)=>"BitAnd",
+        BinOp::BitOr(_)=>"BitOr",
+        BinOp::Shl(_)=>"Shl",
+        BinOp::Shr(_)=>"Shr",
+        BinOp::Eq(_)=>"Eq",
+        BinOp::Lt(_)=>"Lt",
+        BinOp::Le(_)=>"Le",
+        BinOp::Ne(_)=>"Ne",
+        BinOp::Ge(_)=>"Ge",
+        BinOp::Gt(_)=>"Gt",
+        BinOp::AddEq(_)=>"AddEq",
+        BinOp::SubEq(_)=>"SubEq",
+        BinOp::MulEq(_)=>"MulEq",
+        BinOp::DivEq(_)=>"DivEq",
+        BinOp::RemEq(_)=>"RemEq",
+        BinOp::BitXorEq(_)=>"BitXorEq",
+        BinOp::BitAndEq(_)=>"BitAndEq",
+        BinOp::BitOrEq(_)=>"BitOrEq",
+        BinOp::ShlEq(_)=>"ShlEq",
+        BinOp::ShrEq(_)=>"ShrEq",
+    }
 }
 
 fn process_expr(expr:Expr)->TokenStream{
     match expr{
-        Expr::Call(_expr)=>{
-        },
-        Expr::Binary(_expr)=>{
-        },
-        Expr::Unary(_expr)=>{
-        },
+        Expr::Call(expr)=>{
+            if let Expr::Path(func) = *expr.func{
+                if func.path.segments.len() != 1{
+                    return error(func.span(), "call identifier not simple");
+                }
+                let seg = &func.path.segments[0].ident.to_string();
+                // lets get all fn args
+                let mut args = Vec::new();
+                for arg in expr.args{
+                    args.push(process_expr(arg));
+                }
+                return quote!{ShExpr::ShCall(ShCall{call:#seg.to_string(), args:vec![#(Box::new(#args)),*]})}
+            }
+            else{
+                 return error(expr.span(), "call identifier not simple");
+            }
+        }
+        Expr::Binary(expr)=>{
+            let left = process_expr(*expr.left);
+            let right = process_expr(*expr.right);
+            let op = Ident::new(get_binop(expr.op), Span::call_site());
+            return quote!{ShExpr::ShBinary(ShBinary{left:Box::new(#left),op:ShBinOp::#op,right:Box::new(#right)})}
+        }
+        Expr::Unary(expr)=>{
+            let op;
+            if let UnOp::Not(_) = &expr.op{
+                op = Ident::new("Not", Span::call_site());
+            }
+            else if let UnOp::Neg(_) = &expr.op{
+                op = Ident::new("Neg", Span::call_site());
+            }
+            else {
+                return error(expr.span(), "Deref not implemented");
+            }
+            let right = process_expr(*expr.expr);
+            return quote!{ShExpr::ShUnary(ShUnary{op:ShUnaryOp::#op,expr:Box::new(#right)})}
+        }
         Expr::Lit(expr)=>{
             match expr.lit{
                 Lit::Str(lit)=>{
@@ -99,11 +295,11 @@ fn process_expr(expr:Expr)->TokenStream{
                     return quote!{ShExpr::ShLit(ShLit::ShLitStr(#value.to_string()))}
                 }
                 Lit::Int(lit)=>{
-                    let value = lit.value();
+                    let value = lit.value() as i64;
                     return quote!{ShExpr::ShLit(ShLit::ShLitInt(#value))}
                 }
                 Lit::Float(lit)=>{
-                    let value = lit.value();
+                    let value = lit.value() as f64;
                     return quote!{ShExpr::ShLit(ShLit::ShLitFloat(#value))}
                 }
                 Lit::Bool(lit)=>{
@@ -114,34 +310,127 @@ fn process_expr(expr:Expr)->TokenStream{
                     return error(expr.span(), "Unsupported literal for shader")
                 }
             }
-        },
-        Expr::Let(_expr)=>{
-        },
-        Expr::If(_expr)=>{
-        },
-        Expr::While(_expr)=>{
-        },
-        Expr::ForLoop(_expr)=>{
-        },
-        Expr::Assign(_expr)=>{
-        },
-        Expr::AssignOp(_expr)=>{
-        },
-        Expr::Field(_expr)=>{
-        },
-        Expr::Index(_exprx)=>{
-        },
-        Expr::Path(_expr)=>{
-        },
-        Expr::Paren(_expr)=>{
-        },
+        }
+        Expr::Let(expr)=>{
+            return error(expr.span(), "Not implemented Expr::Let")
+        }
+        Expr::If(expr)=>{
+            let cond = process_expr(*expr.cond);
+            let then_branch = process_block(expr.then_branch);
+
+            if let Some((_,else_branch)) = expr.else_branch{
+                let else_branch = process_expr(*else_branch);
+                return quote!{
+                    ShExpr::ShIf(ShIf{
+                        cond:Box::new(#cond),
+                        then_branch:#then_branch,
+                        else_branch:Some(Box::new(#else_branch))
+                    })
+                }
+            }
+            return quote!{
+               ShExpr::ShIf(ShIf{
+                   cond:Box::new(#cond),
+                   then_branch:Box::new(#then_branch),
+                   else_branch:None
+                })
+            }
+        }
+        Expr::While(expr)=>{
+            let cond = process_expr(*expr.cond);
+            let block = process_block(expr.body);
+            return quote!{
+               ShExpr::ShWhile(ShWhile{
+                   cond:Box::new(#cond),
+                   body:#block
+                })
+            }
+        }
+        Expr::ForLoop(expr)=>{
+              // lets define a local with storage specified
+            let span = expr.span();
+            if let Pat::Ident(pat) = *expr.pat{
+                let name =  pat.ident.to_string();
+                let body = process_block(expr.body);
+                let from_ts;
+                let to_ts;
+                if let Expr::Range(range) = *expr.expr{
+                    if let Some(from) = range.from {
+                        from_ts = process_expr(*from);
+                    }
+                    else{
+                        return error(span, "Must provide from range expression")
+                    }
+                    if let Some(to) = range.to {
+                        to_ts = process_expr(*to);
+                    }
+                    else{
+                        return error(span, "Must provide to range expression")
+                    }
+                }
+                else{
+                    return error(span, "Must provide range expression")
+                }
+                return quote!{
+                    ShExpr::ShForLoop(ShForLoop{
+                        iter:#name.to_string(),
+                        from:Box::new(#from_ts),
+                        to:Box::new(#to_ts),
+                        body:#body
+                    })
+                }
+            }
+            else{
+                return error(expr.span(), "Use simple identifier for for loop")
+            }
+        }
+        Expr::Assign(expr)=>{
+            let left = process_expr(*expr.left);
+            let right = process_expr(*expr.right);
+            return quote!{ShExpr::ShAssign(ShAssign{left:Box::new(#left),right:Box::new(#right)})}
+        }
+        Expr::AssignOp(expr)=>{
+            let left = process_expr(*expr.left);
+            let right = process_expr(*expr.right);
+            let op = Ident::new(get_binop(expr.op), Span::call_site());
+            return quote!{ShExpr::ShAssignOp(ShAssignOp{left:Box::new(#left),op:ShBinOp::#op,right:Box::new(#right)})}
+        }
+        Expr::Field(expr)=>{
+            let member;
+            if let Member::Named(ident) = expr.member{
+                member = ident.to_string();
+            }
+            else{
+                return error(expr.span(), "No unnamed members supported")
+            }
+            let base = process_expr(*expr.base);
+            return quote!{ShExpr::ShField(ShField{base:Box::new(#base),member:#member.to_string()})}
+        }
+        Expr::Index(expr)=>{
+            let base = process_expr(*expr.expr);
+            let index = process_expr(*expr.index);
+            return quote!{ShExpr::ShIndex(ShIndex{base:Box::new(#base),index:Box::new(#index)})}
+        }
+        Expr::Path(expr)=>{
+            if expr.path.segments.len() != 1{
+                return error(expr.span(), "type not simple");
+            }
+            let seg = &expr.path.segments[0].ident.to_string();
+            return quote!{ShExpr::ShId(ShId{name:#seg.to_string()})}
+        }
+        Expr::Paren(expr)=>{
+            let expr = process_expr(*expr.expr);
+            return quote!{ShExpr::ShParen(ShParen{expr:Box::new(#expr)})}
+        }
+        Expr::Block(expr)=>{ // process a block expression
+            let block = process_block(expr.block); 
+            return quote!{ShExpr::ShBlock(#block)}
+        }
         _=>{
             return error(expr.span(), "Unsupported syntax for shader")
         }
     }
-    TokenStream::new()
 }
-
 
 fn process_const_def(item:ItemConst)->TokenStream{
     let name = item.ident.to_string();
@@ -235,94 +524,6 @@ pub fn shader_ast(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed = syn::parse_macro_input!(input as syn::Expr);
 
     let ts = match_root(parsed);
-    println!("----- GENERATED FROM MACRO ---- {}", ts.to_string());
+    //println!("----- GENERATED FROM MACRO ---- {}", ts.to_string());
     proc_macro::TokenStream::from(ts)
-}
-
-fn _debug_expr(x:&Expr)->&str{
-    match x{
-        Expr::Box(_x)=>"Expr::Box",
-        Expr::InPlace(_x)=>"Expr::InPlace",
-        Expr::Array(_x)=>"Expr::Array",
-        Expr::Call(_x)=>"Expr::Call",
-        Expr::MethodCall(_x)=>"Expr::MethodCall",
-        Expr::Tuple(_x)=>"Expr::Tuple",
-        Expr::Binary(_x)=>"Expr::Binary",
-        Expr::Unary(_x)=>"Expr::Unary",
-        Expr::Lit(_x)=>"Expr::Lit",
-        Expr::Cast(_x)=>"Expr::Cast",
-        Expr::Type(_x)=>"Expr::Type",
-        Expr::Let(_x)=>"Expr::Let",
-        Expr::If(_x)=>"Expr::If",
-        Expr::While(_x)=>"Expr::While",
-        Expr::ForLoop(_x)=>"Expr::ForLoop",
-        Expr::Loop(_x)=>"Expr::Loop",
-        Expr::Match(_x)=>"Expr::Match",
-        Expr::Closure(_x)=>"Expr::Closure",
-        Expr::Unsafe(_x)=>"Expr::Unsafe",
-        Expr::Block(_x)=>"Expr::Block",
-        Expr::Assign(_x)=>"Expr::Assign",
-        Expr::AssignOp(_x)=>"Expr::AssignOp",
-        Expr::Field(_x)=>"Expr::Field",
-        Expr::Index(_x)=>"Expr::Index",
-        Expr::Range(_x)=>"Expr::Range",
-        Expr::Path(_x)=>"Expr::Path",
-        Expr::Reference(_x)=>"Expr::Reference",
-        Expr::Break(_x)=>"Expr::Break",
-        Expr::Continue(_x)=>"Expr::Continue",
-        Expr::Return(_x)=>"Expr::Return",
-        Expr::Macro(_x)=>"Expr::Macro",
-        Expr::Struct(_x)=>"Expr::Struct",
-        Expr::Repeat(_x)=>"Expr::Repeat",
-        Expr::Paren(_x)=>"Expr::Paren",
-        Expr::Group(_x)=>"Expr::Group",
-        Expr::Try(_x)=>"Expr::Try",
-        Expr::Async(_x)=>"Expr::Async",
-        Expr::TryBlock(_x)=>"Expr::TryBlock",
-        Expr::Yield(_x)=>"Expr::Yield",
-        Expr::Verbatim(_x)=>"Expr::Verbatim"
-    }
-}
-
-fn _debug_type(x:&Type)->&str{
-    match x{
-        Type::Slice(_x)=>"Type::Slice",
-        Type::Array(_x)=>"Type::Array",
-        Type::Ptr(_x)=>"Type::Ptr",
-        Type::Reference(_x)=>"Type::Reference",
-        Type::BareFn(_x)=>"Type::BareFn",
-        Type::Never(_x)=>"Type::Never",
-        Type::Tuple(_x)=>"Type::Tuple",
-        Type::Path(_x)=>"Type::Path",
-        Type::TraitObject(_x)=>"Type::TraitObject",
-        Type::ImplTrait(_x)=>"Type::ImplTrait",
-        Type::Paren(_x)=>"Type::Paren",
-        Type::Group(_x)=>"Type::Group",
-        Type::Infer(_x)=>"Type::Infer",
-        Type::Macro(_x)=>"Type::Macro",
-        Type::Verbatim(_x)=>"Type::Verbatim",
-    }
-}
-
-fn _debug_item(x:&Item)->&str{
-    match x{
-        Item::ExternCrate(_x)=>"Item::ExternCrate",
-        Item::Use(_x)=>"Item::Use",
-        Item::Static(_x)=>"Item::Static",
-        Item::Const(_x)=>"Item::Const",
-        Item::Fn(_x)=>"Item::Fn",
-        Item::Mod(_x)=>"Item::Mod",
-        Item::ForeignMod(_x)=>"Item::ForeignMod",
-        Item::Type(_x)=>"Item::Type",
-        Item::Existential(_x)=>"Item::Existential",
-        Item::Struct(_x)=>"Item::Struct",
-        Item::Enum(_x)=>"Item::Enum",
-        Item::Union(_x)=>"Item::Union",
-        Item::Trait(_x)=>"Item::Trait",
-        Item::TraitAlias(_x)=>"Item::TraitAlias",
-        Item::Impl(_x)=>"Item::Impl",
-        Item::Macro(_x)=>"Item::Macro",
-        Item::Macro2(_x)=>"Item::Macro2",
-        Item::Verbatim(_x)=>"Item::Verbatim",
-    }
 }

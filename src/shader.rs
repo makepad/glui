@@ -41,19 +41,50 @@ pub struct ShaderVar{
     pub kind:Kind
 }
 
-// the shader ast
+
+
+
+
+// Shader AST typedefs
+
+
+
 pub use shader_ast::*;
 
 // the shader AST types
 #[derive(Clone)]
 pub enum ShExpr{
     ShId(ShId),
-    ShLit(ShLit)
+    ShLit(ShLit),
+    ShAssign(ShAssign),
+    ShCall(ShCall),
+    ShBinary(ShBinary),
+    ShUnary(ShUnary),
+    ShAssignOp(ShAssignOp),
+    ShIf(ShIf),
+    ShWhile(ShWhile),
+    ShForLoop(ShForLoop),
+    ShBlock(ShBlock),
+    ShField(ShField),
+    ShIndex(ShIndex),
+    ShParen(ShParen)
 }
 
 #[derive(Clone)]
 pub struct ShId{
     pub name:String
+}
+
+#[derive(Clone)]
+pub struct ShField{
+    pub base:Box<ShExpr>,
+    pub member:String
+}
+
+#[derive(Clone)]
+pub struct ShIndex{
+    pub base:Box<ShExpr>,
+    pub index:Box<ShExpr>
 }
 
 #[derive(Clone)]
@@ -65,6 +96,100 @@ pub enum ShLit{
 }
 
 #[derive(Clone)]
+pub struct ShIf{
+    pub cond:Box<ShExpr>,
+    pub then_branch:ShBlock,
+    pub else_branch:Option<Box<ShExpr>>,
+}
+
+#[derive(Clone)]
+pub struct ShWhile{
+    pub cond:Box<ShExpr>,
+    pub body:ShBlock,
+}
+
+#[derive(Clone)]
+pub struct ShForLoop{
+    pub iter:String,
+    pub from:Box<ShExpr>,
+    pub to:Box<ShExpr>,
+    pub body:ShBlock
+}
+
+#[derive(Clone)]
+pub struct ShAssign{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>
+}
+
+#[derive(Clone)]
+pub enum ShBinOp{
+    Add,Sub,Mul,Div,
+    Rem,
+    And,Or,
+    BitXor,BitAnd,BitOr,
+    Shl,Shr,
+    Eq, Lt, Le, Ne, Ge, Gt,
+    AddEq,SubEq,MulEq,DivEq,RemEq,
+    BitXorEq,BitAndEq,BitOrEq,ShlEq,ShrEq
+}
+
+#[derive(Clone)]
+pub struct ShBinary{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>,
+    pub op:ShBinOp
+}
+
+#[derive(Clone)]
+pub enum ShUnaryOp{
+    Not, Neg
+}
+
+#[derive(Clone)]
+pub struct ShAssignOp{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>,
+    pub op:ShBinOp
+}
+
+#[derive(Clone)]
+pub struct ShUnary{
+    pub expr:Box<ShExpr>,
+    pub op:ShUnaryOp
+}
+
+#[derive(Clone)]
+pub struct ShCall{
+    pub call:String,
+    pub args:Vec<Box<ShExpr>>
+}
+
+#[derive(Clone)]
+pub struct ShLet{
+    pub name:String,
+    pub ty:String,
+    pub init:Box<ShExpr>
+}
+
+#[derive(Clone)]
+pub struct ShParen{
+    pub expr:Box<ShExpr>,
+}
+
+#[derive(Clone)]
+pub enum ShStmt{
+    ShLet(ShLet),
+    ShExpr(ShExpr),
+    ShSemi(ShExpr)
+}
+
+#[derive(Clone)]
+pub struct ShBlock{
+    pub stmts:Vec<Box<ShStmt>>
+}
+
+#[derive(Clone)]
 pub struct ShFnArg{
     pub name:String,
     pub ty:String
@@ -73,7 +198,9 @@ pub struct ShFnArg{
 #[derive(Clone)]
 pub struct ShFn{
     pub name:String,
-    pub args:Vec<ShFnArg>
+    pub args:Vec<ShFnArg>,
+    pub block:ShBlock,
+    pub ret:String
 }
 
 #[derive(Clone)]
@@ -114,6 +241,10 @@ pub struct ShAst{
     pub consts:Vec<ShConst>,
     pub fns:Vec<ShFn>
 }
+
+
+
+
 
 impl PartialEq for ShaderVar{
     fn eq(&self, other: &ShaderVar) -> bool {
@@ -333,7 +464,10 @@ impl Shader{
             const SQRT1_2:float = 0.070710678118654757;
 
             fn df_viewport(pos:vec2)->vec2{
-                df_pos = pos;
+                !df_pos;
+                let x:int = 10;
+                x.test = 10;
+                x[10] = (10+10);
             }
         }));
  
