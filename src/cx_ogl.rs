@@ -55,8 +55,8 @@ impl Cx{
         DrawList::def_uniforms(sh);
     }
 
-    pub fn def_uniforms(sh: &mut Shader){
-        sh.cx_uniform("prop1", Kind::Float);
+    pub fn def_uniforms(_sh: &mut Shader){
+        //sh.cx_uniform("prop1", Kind::Float);
     }
 
     pub fn uniform_prop1(&mut self, v:f32){

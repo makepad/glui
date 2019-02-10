@@ -207,8 +207,8 @@ impl DrawList{
         self.uniforms.resize(DL_UNI_SIZE, 0.0);
     }
     
-    pub fn def_uniforms(sh:&mut Shader){
-        sh.dl_uniform("prop2", Kind::Float);
+    pub fn def_uniforms(_sh:&mut Shader){
+        //sh.dl_uniform("prop2", Kind::Float);
     }
 
     pub fn uniform_prop2(&mut self, v:f32){

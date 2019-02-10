@@ -23,10 +23,9 @@ pub struct GLUniform{
 #[derive(Default,Clone)]
 pub struct GLSampler{
     pub loc:gl::types::GLint,
-    pub name:String,
-    pub sampler:Sampler
+    pub name:String
+    //pub sampler:Sampler
 }
-
 
 #[derive(Default,Clone)]
 pub struct GLShader{
@@ -43,6 +42,16 @@ pub struct GLShader{
     pub samplers: Vec<GLSampler>
 }
 
+#[derive(Default,Clone)]
+pub struct ShaderUniform{
+    name:String,
+    slots:usize
+}
+
+#[derive(Default,Clone)]
+pub struct ShaderSampler{
+    name:String
+}
 
 #[derive(Default,Clone)]
 pub struct AssembledShader{
@@ -50,6 +59,10 @@ pub struct AssembledShader{
     pub inst_slots:usize,
     pub geom_attribs:usize,
     pub inst_attribs:usize,
+    pub dr_uniforms: Vec<ShaderUniform>,
+    pub dl_uniforms: Vec<ShaderUniform>,
+    pub cx_uniforms: Vec<ShaderUniform>,
+    pub samplers:Vec<ShaderSampler>,
     pub fragment:String,
     pub vertex:String
 }
@@ -174,7 +187,7 @@ impl CxShaders{
                 gl_uni.push(GLUniform{
                     loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
                     name:uni.name.clone(),
-                    size:uni.kind.slots()
+                    size:uni.slots
                 })
             }
         }
@@ -190,14 +203,16 @@ impl CxShaders{
             unsafe{
                 gl_samplers.push(GLSampler{
                     loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
-                    name:sam.name.clone(),
-                    sampler:sam.sampler.clone()
+                    name:sam.name.clone()
+                    //,sampler:sam.sampler.clone()
                 })
             }
         }
         gl_samplers
     }
 
+
+    /*
     pub fn find_method<'a>(sh:&'a Shader, name:&str)->Option<&'a str>{
         for method in &sh.methods{
             if let Some(index) = method.find('('){
@@ -686,6 +701,22 @@ impl CxShaders{
             fragment:pix_final,
             vertex:vtx_final
         }
+    }*/
+    
+
+    pub fn assemble_shader(sh:&Shader)->AssembledShader{
+        AssembledShader{
+            cx_uniforms:Vec::new(),
+            dl_uniforms:Vec::new(),
+            dr_uniforms:Vec::new(),
+            samplers:Vec::new(),
+            geom_slots:0,
+            inst_slots:0,
+            geom_attribs:0,
+            inst_attribs:0,
+            fragment:"".to_string(),
+            vertex:"".to_string()
+        }
     }
 
     pub fn compile_shader(sh:&Shader)->Option<GLShader>{
@@ -755,11 +786,11 @@ impl CxShaders{
                 inst_attribs:inst_attribs,
                 geom_vb:geom_vb,
                 geom_ib:geom_ib,
+                cx_uniforms:Self::compile_get_uniforms(program, &ash.cx_uniforms),
+                dl_uniforms:Self::compile_get_uniforms(program, &ash.dl_uniforms),
+                dr_uniforms:Self::compile_get_uniforms(program, &ash.dr_uniforms),
+                samplers:Self::compile_get_samplers(program, &ash.samplers),
                 assembled_shader:ash,
-                cx_uniforms:Self::compile_get_uniforms(program, &sh.cx_uniforms),
-                dl_uniforms:Self::compile_get_uniforms(program, &sh.dl_uniforms),
-                dr_uniforms:Self::compile_get_uniforms(program, &sh.dr_uniforms),
-                samplers:Self::compile_get_samplers(program, &sh.samplers),
                 ..Default::default()
             })
         }

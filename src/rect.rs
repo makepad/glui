@@ -44,26 +44,27 @@ impl Rect{
             0,1,2,
             2,3,0
         ];
-        sh.geometry("pos", Kind::Vec2);
 
-        sh.uniform("fac", Kind::Float);
+        sh.add_ast(shader_ast!(||{
+            
+            let pos:vec2<Geometry>;
+            let fac:float<Uniform>;
+            let x:float<Instance>;
+            let y:float<Instance>;
+            let w:float<Instance>;
+            let h:float<Instance>;
+            let color:vec4<InstanceV>;
 
-        sh.instance("x", Kind::Float);
-        sh.instance("y", Kind::Float);
-        sh.instance("w", Kind::Float);
-        sh.instance("h", Kind::Float);
-        sh.instancev("color", Kind::Vec4);
-
-        sh.method("
-            vec4 pixel(){
-                return color*fac;
-            }
-        ");
-        sh.method("
-            vec4 vertex(){
+            fn vertex()->vec4{
                 return vec4(pos*vec2(w, h)+vec2(x, y),0.,1.);
             }
-        ");
+
+            fn pixel()->vec4{
+                return color*fac;
+            }
+
+        }));
+
         //sh.log =1;
     }
 

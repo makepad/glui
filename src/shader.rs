@@ -1,53 +1,5 @@
 
-#[derive(Clone,PartialEq, Debug)]
-pub enum Kind{
-    Float,
-    Vec2,
-    Vec3,
-    Vec4,
-    Mat4
-}
-
-impl Default for Kind{
-    fn default()->Kind{
-        Kind::Float
-    }
-}
-
-impl Kind{
-    pub fn slots(&self)->usize{
-        match self {
-            Kind::Float=>1,
-            Kind::Vec2=>2,
-            Kind::Vec3=>3,
-            Kind::Vec4=>4,
-            Kind::Mat4=>16
-        }
-    }
-    pub fn name(&self)->&str{
-        match self {
-            Kind::Float=>"float",
-            Kind::Vec2=>"vec2",
-            Kind::Vec3=>"vec3",
-            Kind::Vec4=>"vec4",
-            Kind::Mat4=>"mat4"
-        }
-    }    
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct ShaderVar{
-    pub name:String,
-    pub kind:Kind
-}
-
-
-
-
-
 // Shader AST typedefs
-
-
 
 pub use shader_ast::*;
 
@@ -67,7 +19,10 @@ pub enum ShExpr{
     ShBlock(ShBlock),
     ShField(ShField),
     ShIndex(ShIndex),
-    ShParen(ShParen)
+    ShParen(ShParen),
+    ShReturn(ShReturn),
+    ShBreak(ShBreak),
+    ShContinue(ShContinue)
 }
 
 #[derive(Clone)]
@@ -86,6 +41,20 @@ pub struct ShIndex{
     pub base:Box<ShExpr>,
     pub index:Box<ShExpr>
 }
+
+#[derive(Clone)]
+pub struct ShReturn{
+    pub expr:Option<Box<ShExpr>>
+}
+
+#[derive(Clone)]
+pub struct ShBreak{
+}
+
+#[derive(Clone)]
+pub struct ShContinue{
+}
+
 
 #[derive(Clone)]
 pub enum ShLit{
@@ -209,7 +178,9 @@ pub enum ShVarStore{
     UniformDl,
     UniformCx,
     Instance,
+    InstanceV,
     Geometry,
+    GeometryV,
     Sampler2D,
     Local,
     Varying,
@@ -243,191 +214,17 @@ pub struct ShAst{
 }
 
 
-
-
-
-impl PartialEq for ShaderVar{
-    fn eq(&self, other: &ShaderVar) -> bool {
-        self.name == other.name
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct ShaderUniform{
-    pub name:String,
-    pub kind:Kind
-}
-
-#[derive(Clone)]
-pub enum Sampler{
-    Sampler2D,
-    Sampler3D
-}
-impl Default for Sampler{
-    fn default()->Self{
-        Sampler::Sampler2D
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct ShaderSampler{
-    pub name:String,
-    pub sampler:Sampler
-}
-
-#[derive(Default, Clone)]
-pub struct ShaderDef{
-    pub name:String,
-    pub def:String
-}
-
-#[derive(Default, Clone)]
-pub struct ShaderStruct{
-    pub name:String,
-    pub def:String
-}
-
-
 #[derive(Default,Clone)]
 pub struct Shader{
     pub log:i32,
     pub geometry_vertices:Vec<f32>,
     pub geometry_indices:Vec<u32>,
-    pub geometries:Vec<ShaderVar>,
-    pub instancing:Vec<ShaderVar>,
-    pub varyings:Vec<ShaderVar>,
-    pub locals:Vec<ShaderVar>,
-    pub defines:Vec<ShaderDef>,
-    pub structs:Vec<ShaderStruct>,
-    pub dr_uniforms:Vec<ShaderUniform>,
-    pub dl_uniforms:Vec<ShaderUniform>,
-    pub cx_uniforms:Vec<ShaderUniform>,
-    pub samplers:Vec<ShaderSampler>,
-    pub methods:Vec<String>,
     pub asts:Vec<ShAst>
 }
 
 impl Shader{
-    pub fn geometry(&mut self, name:&str, kind:Kind){
-        self.geometries.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-    pub fn geometryv(&mut self, name:&str, kind:Kind){
-        self.geometries.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind.clone()
-            }
-        );
-        self.varyings.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-    pub fn sampler(&mut self, name:&str, sampler:Sampler){
-        self.samplers.push(
-            ShaderSampler{
-                sampler:sampler,
-                name:name.to_string()
-            }
-        );
-    }
-
-    pub fn instance(&mut self, name:&str, kind:Kind){
-        self.instancing.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-    pub fn local(&mut self, name:&str, kind:Kind){
-        self.locals.push(
-            ShaderVar{
-                name:name.to_string(),
-            kind:kind
-            }
-        );
-    }
-
-   pub fn uniform(&mut self, name:&str, kind:Kind){
-        self.dr_uniforms.push(
-            ShaderUniform{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-   pub fn dl_uniform(&mut self, name:&str, kind:Kind){
-        self.dl_uniforms.push(
-            ShaderUniform{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-   pub fn cx_uniform(&mut self, name:&str, kind:Kind){
-        self.cx_uniforms.push(
-            ShaderUniform{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-    pub fn define(&mut self, name: &str, def: &str){
-        self.defines.push(
-            ShaderDef{
-                name:name.to_string(),
-                def:def.to_string()
-            }
-        );
-    }
-
-    pub fn instancev(&mut self, name:&str, kind:Kind){
-        self.instancing.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind.clone()
-            }
-        );
-        self.varyings.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-    
-    pub fn varying(&mut self, name:&str, kind:Kind){
-        self.varyings.push(
-            ShaderVar{
-                name:name.to_string(),
-                kind:kind
-            }
-        );
-    }
-
-    pub fn method(&mut self, body:&str){
-        self.methods.push(body.to_string())
-    }
-
-    pub fn shader(&mut self, shader: ShAst){
-
-    }
-
-    pub fn add_ast(&mut self, _root:ShAst){
-
+    pub fn add_ast(&mut self, ast:ShAst){
+        self.asts.push(ast);
     }
 
     pub fn new()->Shader{
@@ -441,7 +238,7 @@ impl Shader{
     }
 
     pub fn def_constants(&mut self){
-
+        /*
         self.define("PI","3.141592653589793");
 		self.define("E","2.718281828459045");
 		self.define("LN2","0.6931471805599453");
@@ -451,26 +248,11 @@ impl Shader{
 		self.define("SQRT1_2","0.70710678118654757");
 		self.define("TORAD","0.017453292519943295");
 		self.define("GOLDEN","1.618033988749895");
+        */
     }
 
     pub fn def_df(&mut self){
-
-        self.add_ast(shader_ast!(||{
-            let df_pos: vec2<Uniform>;
-            let mine: vec2<UniformDl>;
-            let x: float<Local>;
-            let y: float<Varying>;
-
-            const SQRT1_2:float = 0.070710678118654757;
-
-            fn df_viewport(pos:vec2)->vec2{
-                !df_pos;
-                let x:int = 10;
-                x.test = 10;
-                x[10] = (10+10);
-            }
-        }));
- 
+        /*
         self.local("df_pos", Kind::Vec2);
         self.local("df_result", Kind::Vec4);
         self.local("df_last_pos", Kind::Vec2);
@@ -670,6 +452,6 @@ impl Shader{
                 float e = 1.0e-10;
                 return vec4(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x, c.w);
             }
-        ");
+        ");*/
     }
 }

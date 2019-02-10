@@ -129,7 +129,8 @@ fn process_fn_def(item:ItemFn)->TokenStream{
         }
     }   
     else{
-        return error(item.span(), "function needs to specify return type")
+        rtype = "void".to_string();
+        //return error(item.span(), "function needs to specify return type")
     }
     let block = process_block(*item.block);
     quote!{
@@ -425,6 +426,20 @@ fn process_expr(expr:Expr)->TokenStream{
         Expr::Block(expr)=>{ // process a block expression
             let block = process_block(expr.block); 
             return quote!{ShExpr::ShBlock(#block)}
+        }
+        Expr::Return(expr)=>{
+            if let Some(expr) = expr.expr{
+                let expr = process_expr(*expr);
+                return quote!{ShExpr::ShReturn(ShReturn{expr:Some(Box::new(#expr))})}
+            }
+            return quote!{ShExpr::ShReturn(ShReturn{expr:None})}
+        }
+        Expr::Break(_)=>{
+            return quote!{ShExpr::ShBreak(ShBreak{})}
+
+        }
+        Expr::Continue(_)=>{
+            return quote!{ShExpr::ShContinue(ShContinue{})}
         }
         _=>{
             return error(expr.span(), "Unsupported syntax for shader")

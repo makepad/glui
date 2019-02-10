@@ -43,7 +43,7 @@ impl Text{
             0,1,2,
             2,3,0
         ];
-
+/*
         sh.geometry("geom", Kind::Vec2);
         
         sh.sampler("tex_sampler", Sampler::Sampler2D);
@@ -102,6 +102,7 @@ impl Text{
             }
         ");
         sh.log =1;
+        */
     }
 
     pub fn draw_text(&mut self, cx:&mut Cx, text:&str){
