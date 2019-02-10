@@ -1,4 +1,3 @@
-use shader_ast::*;
 
 #[derive(Clone,PartialEq, Debug)]
 pub enum Kind{
@@ -40,6 +39,80 @@ impl Kind{
 pub struct ShaderVar{
     pub name:String,
     pub kind:Kind
+}
+
+// the shader ast
+pub use shader_ast::*;
+
+// the shader AST types
+#[derive(Clone)]
+pub enum ShExpr{
+    ShId(ShId),
+    ShLit(ShLit)
+}
+
+#[derive(Clone)]
+pub struct ShId{
+    pub name:String
+}
+
+#[derive(Clone)]
+pub enum ShLit{
+    ShLitInt(i64),
+    ShLitFloat(f64),
+    ShLitStr(String),
+    ShLitBool(bool)
+}
+
+#[derive(Clone)]
+pub struct ShFnArg{
+    pub name:String,
+    pub ty:String
+}
+
+#[derive(Clone)]
+pub struct ShFn{
+    pub name:String,
+    pub args:Vec<ShFnArg>
+}
+
+#[derive(Clone)]
+pub enum ShVarStore{
+    Uniform,
+    UniformDl,
+    UniformCx,
+    Instance,
+    Geometry,
+    Sampler2D,
+    Local,
+    Varying,
+}
+
+#[derive(Clone)]
+pub struct ShVar{
+    pub name:String,
+    pub ty:String,
+    pub store:ShVarStore
+}
+
+#[derive(Clone)]
+pub struct ShConst{
+    pub name:String,
+    pub ty:String,
+    pub value:ShExpr
+}
+
+#[derive(Clone)]
+pub struct ShStruct{
+}
+
+// the root
+#[derive(Clone)]
+pub struct ShAst{
+    pub structs:Vec<ShStruct>,
+    pub vars:Vec<ShVar>,
+    pub consts:Vec<ShConst>,
+    pub fns:Vec<ShFn>
 }
 
 impl PartialEq for ShaderVar{
@@ -99,7 +172,8 @@ pub struct Shader{
     pub dl_uniforms:Vec<ShaderUniform>,
     pub cx_uniforms:Vec<ShaderUniform>,
     pub samplers:Vec<ShaderSampler>,
-    pub methods:Vec<String>
+    pub methods:Vec<String>,
+    pub asts:Vec<ShAst>
 }
 
 impl Shader{
@@ -148,7 +222,7 @@ impl Shader{
         self.locals.push(
             ShaderVar{
                 name:name.to_string(),
-                kind:kind
+            kind:kind
             }
         );
     }
@@ -217,7 +291,11 @@ impl Shader{
         self.methods.push(body.to_string())
     }
 
-    pub fn function(&mut self, _name:&str, _root:Function){
+    pub fn shader(&mut self, shader: ShAst){
+
+    }
+
+    pub fn add_ast(&mut self, _root:ShAst){
 
     }
 
@@ -246,10 +324,19 @@ impl Shader{
 
     pub fn def_df(&mut self){
 
-        self.function("df_viewport", shader_ast!(|x:i32|->i32{
-            
-        }));
+        self.add_ast(shader_ast!(||{
+            let df_pos: vec2<Uniform>;
+            let mine: vec2<UniformDl>;
+            let x: float<Local>;
+            let y: float<Varying>;
 
+            const SQRT1_2:float = 0.070710678118654757;
+
+            fn df_viewport(pos:vec2)->vec2{
+                df_pos = pos;
+            }
+        }));
+ 
         self.local("df_pos", Kind::Vec2);
         self.local("df_result", Kind::Vec4);
         self.local("df_last_pos", Kind::Vec2);

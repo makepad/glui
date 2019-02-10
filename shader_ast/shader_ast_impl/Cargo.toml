@@ -10,6 +10,7 @@ proc-macro = true
 [dependencies]
 quote = "*"
 proc-macro-hack = "*"
+proc-macro2 = "*"
 
 [dependencies.syn]
 version = "*"
