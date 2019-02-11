@@ -270,7 +270,7 @@ fn get_binop(op:BinOp)->&'static str{
     }
 }
 
-// return the string name of a BinOp enum 
+// generate the AST from an expression
 fn generate_expr(expr:Expr)->TokenStream{
     match expr{
         Expr::Call(expr)=>{
@@ -468,6 +468,7 @@ fn generate_expr(expr:Expr)->TokenStream{
     }
 }
 
+// generate the ShConst defs
 fn generate_const_def(item:ItemConst)->TokenStream{
     let name = item.ident.to_string();
     let ty;
@@ -493,10 +494,12 @@ fn generate_const_def(item:ItemConst)->TokenStream{
     }
 }
 
+// generate the ShStruct defs
 fn generate_struct_def(_item:ItemStruct)->TokenStream{
     TokenStream::new()
 }
 
+// Match against the root node from the macro (the entrypoint of the whole thing)
 fn match_root(expr:Expr)->TokenStream{
     let mut vars = Vec::new();
     let mut fns = Vec::new();
@@ -554,6 +557,7 @@ fn match_root(expr:Expr)->TokenStream{
     }
 }
 
+// The actual macro
 #[proc_macro_hack]
 pub fn shader_ast(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     
