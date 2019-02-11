@@ -58,7 +58,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
                 // lets read the path args
                 if let PathArguments::AngleBracketed(angle) = &seg.arguments{
                     if angle.args.len() != 1{
-                        return error(angle.span(), "storage arg incorrect");
+                        return error(angle.span(), "Please pass one storage arg like float<Uniform> or float<Local>");
                     }
                     let arg = &angle.args[0];
                     if let GenericArgument::Type(ty) = arg{
