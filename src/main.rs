@@ -62,7 +62,7 @@ impl App{
 
 fn main() {
     let mut cx = Cx{
-        title:"HALLO World".to_string(),
+        title:"Hello World".to_string(),
         ..Default::default()
     };
 

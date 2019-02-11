@@ -1,4 +1,19 @@
-#![feature(proc_macro_hygiene)]
+// This proc_macro is used to transform a rust closure function
+// of the following form
+// shader_ast!(||{
+//      // var def:
+//      let x:float<Uniform> = 10.0;
+//      // fn def:
+//      fn pixel()->vec4{
+//          return vec4(1.);
+//      }
+//})
+// into a nested tree of shader AST structs
+// these are defined in shader.rs in the root project
+// which looks something like the following:
+// ShAst{
+//      vars:vec![ShVar{name:"x".to_string(), ty:"float".to_string()}]   
+// }
 
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -19,7 +34,8 @@ fn error(span:Span, msg: &str)->TokenStream{
     quote_spanned!(span=>compile_error!(#fmsg))
 }
 
-fn process_var_def(stmt:Local)->TokenStream{
+// generate the ShVar definitions from a let statement
+fn generate_shvar_defs(stmt:Local)->TokenStream{
     // lets define a local with storage specified
     if let Pat::Ident(pat) = &stmt.pats[0]{
         let name =  pat.ident.to_string();
@@ -78,7 +94,8 @@ fn process_var_def(stmt:Local)->TokenStream{
     }
 }
 
-fn process_fn_def(item:ItemFn)->TokenStream{
+// generate the ShFn definitions from a rust fn statement
+fn generate_fn_def(item:ItemFn)->TokenStream{
     // alright lets do a function
     // and then incrementally add all supported ast nodes
     let name = item.ident.to_string();
@@ -132,7 +149,7 @@ fn process_fn_def(item:ItemFn)->TokenStream{
         rtype = "void".to_string();
         //return error(item.span(), "function needs to specify return type")
     }
-    let block = process_block(*item.block);
+    let block = generate_block(*item.block);
     quote!{
         ShFn{
             name:#name.to_string(),
@@ -143,7 +160,8 @@ fn process_fn_def(item:ItemFn)->TokenStream{
     }
 }
 
-fn process_let(local:Local)->TokenStream{
+// generate a let statement inside a function
+fn generate_let(local:Local)->TokenStream{
     // lets define a local with storage specified
     if let Pat::Ident(pat) = &local.pats[0]{
         let name =  pat.ident.to_string();
@@ -165,7 +183,7 @@ fn process_let(local:Local)->TokenStream{
         }
         let init;
         if let Some((_,local_init)) = local.init{
-            init = process_expr(*local_init);
+            init = generate_expr(*local_init);
         }
         else{
             return error(local.span(), "let pattern misses initializer");
@@ -183,12 +201,13 @@ fn process_let(local:Local)->TokenStream{
     }
 }
 
-fn process_block(block:Block)->TokenStream{
+// generate a { } block AST 
+fn generate_block(block:Block)->TokenStream{
     let mut stmts = Vec::new();
     for stmt in block.stmts{
         match stmt{
             Stmt::Local(stmt)=>{
-                let letstmt = process_let(stmt);
+                let letstmt = generate_let(stmt);
                 stmts.push(quote!{
                     ShStmt::ShLet(#letstmt)
                 })
@@ -197,13 +216,13 @@ fn process_block(block:Block)->TokenStream{
                 return error(stmt.span(), "Shader functions don't support items");
             }
             Stmt::Expr(stmt)=>{
-                let expr = process_expr(stmt);
+                let expr = generate_expr(stmt);
                 stmts.push(quote!{
                     ShStmt::ShExpr(#expr)
                 })
             }
             Stmt::Semi(stmt, _tok)=>{
-                let expr = process_expr(stmt);
+                let expr = generate_expr(stmt);
                 stmts.push(quote!{
                     ShStmt::ShSemi(#expr)
                 })
@@ -217,6 +236,7 @@ fn process_block(block:Block)->TokenStream{
     }
 }
 
+// return the string name of a BinOp enum 
 fn get_binop(op:BinOp)->&'static str{
     match op{
         BinOp::Add(_)=>"Add",
@@ -250,7 +270,8 @@ fn get_binop(op:BinOp)->&'static str{
     }
 }
 
-fn process_expr(expr:Expr)->TokenStream{
+// return the string name of a BinOp enum 
+fn generate_expr(expr:Expr)->TokenStream{
     match expr{
         Expr::Call(expr)=>{
             if let Expr::Path(func) = *expr.func{
@@ -261,7 +282,7 @@ fn process_expr(expr:Expr)->TokenStream{
                 // lets get all fn args
                 let mut args = Vec::new();
                 for arg in expr.args{
-                    args.push(process_expr(arg));
+                    args.push(generate_expr(arg));
                 }
                 return quote!{ShExpr::ShCall(ShCall{call:#seg.to_string(), args:vec![#(Box::new(#args)),*]})}
             }
@@ -270,8 +291,8 @@ fn process_expr(expr:Expr)->TokenStream{
             }
         }
         Expr::Binary(expr)=>{
-            let left = process_expr(*expr.left);
-            let right = process_expr(*expr.right);
+            let left = generate_expr(*expr.left);
+            let right = generate_expr(*expr.right);
             let op = Ident::new(get_binop(expr.op), Span::call_site());
             return quote!{ShExpr::ShBinary(ShBinary{left:Box::new(#left),op:ShBinOp::#op,right:Box::new(#right)})}
         }
@@ -286,7 +307,7 @@ fn process_expr(expr:Expr)->TokenStream{
             else {
                 return error(expr.span(), "Deref not implemented");
             }
-            let right = process_expr(*expr.expr);
+            let right = generate_expr(*expr.expr);
             return quote!{ShExpr::ShUnary(ShUnary{op:ShUnaryOp::#op,expr:Box::new(#right)})}
         }
         Expr::Lit(expr)=>{
@@ -316,11 +337,11 @@ fn process_expr(expr:Expr)->TokenStream{
             return error(expr.span(), "Not implemented Expr::Let")
         }
         Expr::If(expr)=>{
-            let cond = process_expr(*expr.cond);
-            let then_branch = process_block(expr.then_branch);
+            let cond = generate_expr(*expr.cond);
+            let then_branch = generate_block(expr.then_branch);
 
             if let Some((_,else_branch)) = expr.else_branch{
-                let else_branch = process_expr(*else_branch);
+                let else_branch = generate_expr(*else_branch);
                 return quote!{
                     ShExpr::ShIf(ShIf{
                         cond:Box::new(#cond),
@@ -338,8 +359,8 @@ fn process_expr(expr:Expr)->TokenStream{
             }
         }
         Expr::While(expr)=>{
-            let cond = process_expr(*expr.cond);
-            let block = process_block(expr.body);
+            let cond = generate_expr(*expr.cond);
+            let block = generate_block(expr.body);
             return quote!{
                ShExpr::ShWhile(ShWhile{
                    cond:Box::new(#cond),
@@ -352,18 +373,18 @@ fn process_expr(expr:Expr)->TokenStream{
             let span = expr.span();
             if let Pat::Ident(pat) = *expr.pat{
                 let name =  pat.ident.to_string();
-                let body = process_block(expr.body);
+                let body = generate_block(expr.body);
                 let from_ts;
                 let to_ts;
                 if let Expr::Range(range) = *expr.expr{
                     if let Some(from) = range.from {
-                        from_ts = process_expr(*from);
+                        from_ts = generate_expr(*from);
                     }
                     else{
                         return error(span, "Must provide from range expression")
                     }
                     if let Some(to) = range.to {
-                        to_ts = process_expr(*to);
+                        to_ts = generate_expr(*to);
                     }
                     else{
                         return error(span, "Must provide to range expression")
@@ -386,13 +407,13 @@ fn process_expr(expr:Expr)->TokenStream{
             }
         }
         Expr::Assign(expr)=>{
-            let left = process_expr(*expr.left);
-            let right = process_expr(*expr.right);
+            let left = generate_expr(*expr.left);
+            let right = generate_expr(*expr.right);
             return quote!{ShExpr::ShAssign(ShAssign{left:Box::new(#left),right:Box::new(#right)})}
         }
         Expr::AssignOp(expr)=>{
-            let left = process_expr(*expr.left);
-            let right = process_expr(*expr.right);
+            let left = generate_expr(*expr.left);
+            let right = generate_expr(*expr.right);
             let op = Ident::new(get_binop(expr.op), Span::call_site());
             return quote!{ShExpr::ShAssignOp(ShAssignOp{left:Box::new(#left),op:ShBinOp::#op,right:Box::new(#right)})}
         }
@@ -404,12 +425,12 @@ fn process_expr(expr:Expr)->TokenStream{
             else{
                 return error(expr.span(), "No unnamed members supported")
             }
-            let base = process_expr(*expr.base);
+            let base = generate_expr(*expr.base);
             return quote!{ShExpr::ShField(ShField{base:Box::new(#base),member:#member.to_string()})}
         }
         Expr::Index(expr)=>{
-            let base = process_expr(*expr.expr);
-            let index = process_expr(*expr.index);
+            let base = generate_expr(*expr.expr);
+            let index = generate_expr(*expr.index);
             return quote!{ShExpr::ShIndex(ShIndex{base:Box::new(#base),index:Box::new(#index)})}
         }
         Expr::Path(expr)=>{
@@ -420,16 +441,16 @@ fn process_expr(expr:Expr)->TokenStream{
             return quote!{ShExpr::ShId(ShId{name:#seg.to_string()})}
         }
         Expr::Paren(expr)=>{
-            let expr = process_expr(*expr.expr);
+            let expr = generate_expr(*expr.expr);
             return quote!{ShExpr::ShParen(ShParen{expr:Box::new(#expr)})}
         }
         Expr::Block(expr)=>{ // process a block expression
-            let block = process_block(expr.block); 
+            let block = generate_block(expr.block); 
             return quote!{ShExpr::ShBlock(#block)}
         }
         Expr::Return(expr)=>{
             if let Some(expr) = expr.expr{
-                let expr = process_expr(*expr);
+                let expr = generate_expr(*expr);
                 return quote!{ShExpr::ShReturn(ShReturn{expr:Some(Box::new(#expr))})}
             }
             return quote!{ShExpr::ShReturn(ShReturn{expr:None})}
@@ -447,7 +468,7 @@ fn process_expr(expr:Expr)->TokenStream{
     }
 }
 
-fn process_const_def(item:ItemConst)->TokenStream{
+fn generate_const_def(item:ItemConst)->TokenStream{
     let name = item.ident.to_string();
     let ty;
 
@@ -462,7 +483,7 @@ fn process_const_def(item:ItemConst)->TokenStream{
         return error(item.ty.span(), "const type not a basic identifier");
     }
 
-    let expr = process_expr(*item.expr);
+    let expr = generate_expr(*item.expr);
     quote!{
         ShConst{
             name:#name.to_string(),
@@ -472,7 +493,7 @@ fn process_const_def(item:ItemConst)->TokenStream{
     }
 }
 
-fn process_struct_def(_item:ItemStruct)->TokenStream{
+fn generate_struct_def(_item:ItemStruct)->TokenStream{
     TokenStream::new()
 }
 
@@ -487,18 +508,18 @@ fn match_root(expr:Expr)->TokenStream{
                 for stmt in expr.block.stmts{
                     match stmt{
                         Stmt::Local(stmt)=>{
-                            vars.push(process_var_def(stmt));
+                            vars.push(generate_shvar_defs(stmt));
                         }
                         Stmt::Item(stmt)=>{
                             match stmt{
                                 Item::Struct(item)=>{
-                                    structs.push(process_struct_def(item));
+                                    structs.push(generate_struct_def(item));
                                 }
                                 Item::Const(item)=>{
-                                    consts.push(process_const_def(item));
+                                    consts.push(generate_const_def(item));
                                 }
                                 Item::Fn(item)=>{
-                                    fns.push(process_fn_def(item));
+                                    fns.push(generate_fn_def(item));
                                 }
                                 _=>{
                                     return error(stmt.span(), "Unexpected statement")
