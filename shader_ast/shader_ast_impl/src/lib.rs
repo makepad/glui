@@ -64,29 +64,29 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
                     if let GenericArgument::Type(ty) = arg{
                         if let Type::Path(typath) = ty{
                             if typath.path.segments.len() != 1{
-                                return error(typath.span(), "type not simple");
+                                return error(typath.span(), "Only simple typenames such as float or vec4 are supported");
                             }
                             let seg = &typath.path.segments[0];
                             store = seg.ident.clone();
                         }
                         else{
-                            return error(arg.span(), "type store arg not a basic identifier");
+                            return error(arg.span(), "Only simple typenames such as float or vec4 are supported");
                         }
                     }
                     else{
-                        return error(arg.span(), "type store arg not a type");
+                        return error(arg.span(), "Please pass one storage arg like float<Uniform> or float<Local>");
                     }
                 }
                 else{
-                    return error(seg.ident.span(), "type should have storage specifier <>");
+                    return error(seg.ident.span(), "type should have storage specifier like float<Uniform> or float<Local>");
                 }
             }
             else{
-                return error(stmt.span(), "type missing or malformed");
+                return error(stmt.span(), "Please give the variable a type of the form float<Local> or vec4<Uniform>");
             }
         }
         else{
-            return error(stmt.span(), "let pattern misses type info");
+            return error(stmt.span(), "Please give the variable a type of the form float<Local> or vec4<Uniform>");
         }
         return quote!{
             ShVar{
