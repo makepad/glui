@@ -14,6 +14,13 @@
 // ShAst{
 //      vars:vec![ShVar{name:"x".to_string(), ty:"float".to_string()}]   
 // }
+// The subset of Rust syntax we support is directly related to
+// a mapping of GLSL.
+// types have to be simple names like float or vec4
+// we support for loops only with integer ranges
+// think of the subset as how you would write GLSL with a Rust syntax
+// not as what you can write in Rust that has no direct
+// word for word match in GLSL.
 
 extern crate proc_macro;
 extern crate proc_macro2;
