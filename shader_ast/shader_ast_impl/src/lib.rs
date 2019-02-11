@@ -39,7 +39,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
     // lets define a local with storage specified
     if let Pat::Ident(pat) = &stmt.pats[0]{
         let name =  pat.ident.to_string();
-        let tyc;
+        let found_type;
         let store;
         if let Some((_tok, ty)) = stmt.ty.clone(){
             if let Type::Path(typath) = *ty{
@@ -47,7 +47,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
                     return error(typath.span(), "type not simple");
                 }
                 let seg = &typath.path.segments[0];
-                tyc = seg.ident.to_string();
+                found_type = seg.ident.to_string();
                 // lets read the path args
                 if let PathArguments::AngleBracketed(angle) = &seg.arguments{
                     if angle.args.len() != 1{
@@ -84,7 +84,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
         return quote!{
             ShVar{
                 name:#name.to_string(),
-                ty:#tyc.to_string(),
+                ty:#found_type.to_string(),
                 store:ShVarStore::#store
             }
         }
@@ -106,13 +106,13 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
             // lets look at pat and ty
             if let Pat::Ident(pat) = &arg.pat{
                 let name =  pat.ident.to_string();
-                let tyc;
+                let found_type;
                 if let Type::Path(typath) = &arg.ty{
                     if typath.path.segments.len() != 1{
                         return error(typath.span(), "arg type not simple");
                     }
                     let seg = &typath.path.segments[0];
-                    tyc = seg.ident.to_string();
+                    found_type = seg.ident.to_string();
                 }
                 else{
                     return error(arg.span(), "arg type not simple");
@@ -120,7 +120,7 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
                 args.push(quote!{
                     ShFnArg{
                         name:#name.to_string(),
-                        ty:#tyc.to_string()
+                        ty:#found_type.to_string()
                     }
                 })
             }
@@ -132,21 +132,21 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
              return error(arg.span(), "arg pattern not simple identifier")
         }
     }
-    let rtype;
+    let return_type;
     if let ReturnType::Type(_, ty) = item.decl.output{
         if let Type::Path(typath) = *ty{
             if typath.path.segments.len() != 1{
                 return error(typath.span(), "return type not simple");
             }
             let seg = &typath.path.segments[0];
-            rtype = seg.ident.to_string();
+            return_type = seg.ident.to_string();
         }
         else{
             return error(ty.span(), "return type not simple");
         }
     }   
     else{
-        rtype = "void".to_string();
+        return_type = "void".to_string();
         //return error(item.span(), "function needs to specify return type")
     }
     let block = generate_block(*item.block);
@@ -154,7 +154,7 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
         ShFn{
             name:#name.to_string(),
             args:vec![#(#args),*],
-            ret:#rtype.to_string(),
+            ret:#return_type.to_string(),
             block:#block
         }
     }
@@ -165,14 +165,14 @@ fn generate_let(local:Local)->TokenStream{
     // lets define a local with storage specified
     if let Pat::Ident(pat) = &local.pats[0]{
         let name =  pat.ident.to_string();
-        let tyc;
+        let found_type;
         if let Some((_tok, ty)) = local.ty.clone(){
             if let Type::Path(typath) = *ty{
                 if typath.path.segments.len() != 1{
                     return error(typath.span(), "type not simple");
                 }
                 let seg = &typath.path.segments[0];
-                tyc = seg.ident.to_string();
+                found_type = seg.ident.to_string();
             }
             else{
                 return error(local.span(), "type missing or malformed");
@@ -191,7 +191,7 @@ fn generate_let(local:Local)->TokenStream{
         return quote!{
             ShLet{
                 name:#name.to_string(),
-                ty:#tyc.to_string(),
+                ty:#found_type.to_string(),
                 init:Box::new(#init)
             }
         }
