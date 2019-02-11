@@ -51,7 +51,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
         if let Some((_tok, ty)) = stmt.ty.clone(){
             if let Type::Path(typath) = *ty{
                 if typath.path.segments.len() != 1{
-                    return error(typath.span(), "type not simple");
+                    return error(typath.span(), "Only simple typenames such as float or vec4 are supported");
                 }
                 let seg = &typath.path.segments[0];
                 found_type = seg.ident.to_string();
