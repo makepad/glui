@@ -499,8 +499,8 @@ fn generate_struct_def(_item:ItemStruct)->TokenStream{
     TokenStream::new()
 }
 
-// Match against the root node from the macro (the entrypoint of the whole thing)
-fn match_root(expr:Expr)->TokenStream{
+// Generate the ShAst rootnode
+fn generate_root(expr:Expr)->TokenStream{
     let mut vars = Vec::new();
     let mut fns = Vec::new();
     let mut consts = Vec::new();
@@ -563,7 +563,7 @@ pub fn shader_ast(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     
     let parsed = syn::parse_macro_input!(input as syn::Expr);
 
-    let ts = match_root(parsed);
+    let ts = generate_root(parsed);
     //println!("----- GENERATED FROM MACRO ---- {}", ts.to_string());
     proc_macro::TokenStream::from(ts)
 }
