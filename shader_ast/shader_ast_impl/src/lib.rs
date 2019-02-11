@@ -97,7 +97,7 @@ fn generate_shvar_defs(stmt:Local)->TokenStream{
         }
     }
     else{
-        return error(stmt.span(), "let pattern not simple identifier")
+        return error(stmt.span(), "Please only use simple identifiers such as x or var_iable")
     }
 }
 
