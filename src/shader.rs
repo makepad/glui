@@ -3,159 +3,13 @@
 
 pub use shader_ast::*;
 
-// the shader AST types
+// The AST block
 #[derive(Clone)]
-pub enum ShExpr{
-    ShId(ShId),
-    ShLit(ShLit),
-    ShAssign(ShAssign),
-    ShCall(ShCall),
-    ShBinary(ShBinary),
-    ShUnary(ShUnary),
-    ShAssignOp(ShAssignOp),
-    ShIf(ShIf),
-    ShWhile(ShWhile),
-    ShForLoop(ShForLoop),
-    ShBlock(ShBlock),
-    ShField(ShField),
-    ShIndex(ShIndex),
-    ShParen(ShParen),
-    ShReturn(ShReturn),
-    ShBreak(ShBreak),
-    ShContinue(ShContinue)
-}
-
-#[derive(Clone)]
-pub struct ShId{
-    pub name:String
-}
-
-#[derive(Clone)]
-pub struct ShField{
-    pub base:Box<ShExpr>,
-    pub member:String
-}
-
-#[derive(Clone)]
-pub struct ShIndex{
-    pub base:Box<ShExpr>,
-    pub index:Box<ShExpr>
-}
-
-#[derive(Clone)]
-pub struct ShReturn{
-    pub expr:Option<Box<ShExpr>>
-}
-
-#[derive(Clone)]
-pub struct ShBreak{
-}
-
-#[derive(Clone)]
-pub struct ShContinue{
-}
-
-
-#[derive(Clone)]
-pub enum ShLit{
-    ShLitInt(i64),
-    ShLitFloat(f64),
-    ShLitStr(String),
-    ShLitBool(bool)
-}
-
-#[derive(Clone)]
-pub struct ShIf{
-    pub cond:Box<ShExpr>,
-    pub then_branch:ShBlock,
-    pub else_branch:Option<Box<ShExpr>>,
-}
-
-#[derive(Clone)]
-pub struct ShWhile{
-    pub cond:Box<ShExpr>,
-    pub body:ShBlock,
-}
-
-#[derive(Clone)]
-pub struct ShForLoop{
-    pub iter:String,
-    pub from:Box<ShExpr>,
-    pub to:Box<ShExpr>,
-    pub body:ShBlock
-}
-
-#[derive(Clone)]
-pub struct ShAssign{
-    pub left:Box<ShExpr>,
-    pub right:Box<ShExpr>
-}
-
-#[derive(Clone)]
-pub enum ShBinOp{
-    Add,Sub,Mul,Div,
-    Rem,
-    And,Or,
-    BitXor,BitAnd,BitOr,
-    Shl,Shr,
-    Eq, Lt, Le, Ne, Ge, Gt,
-    AddEq,SubEq,MulEq,DivEq,RemEq,
-    BitXorEq,BitAndEq,BitOrEq,ShlEq,ShrEq
-}
-
-#[derive(Clone)]
-pub struct ShBinary{
-    pub left:Box<ShExpr>,
-    pub right:Box<ShExpr>,
-    pub op:ShBinOp
-}
-
-#[derive(Clone)]
-pub enum ShUnaryOp{
-    Not, Neg
-}
-
-#[derive(Clone)]
-pub struct ShAssignOp{
-    pub left:Box<ShExpr>,
-    pub right:Box<ShExpr>,
-    pub op:ShBinOp
-}
-
-#[derive(Clone)]
-pub struct ShUnary{
-    pub expr:Box<ShExpr>,
-    pub op:ShUnaryOp
-}
-
-#[derive(Clone)]
-pub struct ShCall{
-    pub call:String,
-    pub args:Vec<Box<ShExpr>>
-}
-
-#[derive(Clone)]
-pub struct ShLet{
-    pub name:String,
-    pub ty:String,
-    pub init:Box<ShExpr>
-}
-
-#[derive(Clone)]
-pub struct ShParen{
-    pub expr:Box<ShExpr>,
-}
-
-#[derive(Clone)]
-pub enum ShStmt{
-    ShLet(ShLet),
-    ShExpr(ShExpr),
-    ShSemi(ShExpr)
-}
-
-#[derive(Clone)]
-pub struct ShBlock{
-    pub stmts:Vec<Box<ShStmt>>
+pub struct ShAst{
+    pub types:Vec<ShType>,
+    pub vars:Vec<ShVar>,
+    pub consts:Vec<ShConst>,
+    pub fns:Vec<ShFn>
 }
 
 #[derive(Clone)]
@@ -164,12 +18,21 @@ pub struct ShFnArg{
     pub ty:String
 }
 
+impl ShFnArg{
+    pub fn new(name:&str, ty:&str)->Self{
+        Self{
+            name:name.to_string(),
+            ty:ty.to_string()
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ShFn{
     pub name:String,
     pub args:Vec<ShFnArg>,
-    pub block:ShBlock,
-    pub ret:String
+    pub ret:String,
+    pub block:Option<ShBlock>,
 }
 
 #[derive(Clone)]
@@ -201,17 +64,227 @@ pub struct ShConst{
 }
 
 #[derive(Clone)]
-pub struct ShStruct{
+pub struct ShTypeField{
+    pub name:String,
+    pub ty:String,
 }
 
-// the root
-#[derive(Clone)]
-pub struct ShAst{
-    pub structs:Vec<ShStruct>,
-    pub vars:Vec<ShVar>,
-    pub consts:Vec<ShConst>,
-    pub fns:Vec<ShFn>
+impl ShTypeField{
+    pub fn new(name:&str, ty:&str)->Self{
+        Self{
+            name:name.to_string(),
+            ty:ty.to_string()
+        }
+    }
 }
+
+#[derive(Clone)]
+pub struct ShType{
+    pub name:String,
+    pub slots:usize,
+    pub prim:bool,
+    pub fields:Vec<ShTypeField>
+}
+
+// AST tree nodes
+
+#[derive(Clone)]
+pub enum ShExpr{
+    ShId(ShId),
+    ShLit(ShLit),
+    ShField(ShField),
+    ShIndex(ShIndex),
+    ShAssign(ShAssign),
+    ShAssignOp(ShAssignOp),
+    ShBinary(ShBinary),
+    ShUnary(ShUnary),
+    ShParen(ShParen),
+    ShBlock(ShBlock),
+    ShCall(ShCall),
+    ShIf(ShIf),
+    ShWhile(ShWhile),
+    ShForLoop(ShForLoop),
+    ShReturn(ShReturn),
+    ShBreak(ShBreak),
+    ShContinue(ShContinue)
+}
+
+#[derive(Clone)]
+pub enum ShBinOp{
+    Add,Sub,Mul,Div,
+    Rem,
+    And,Or,
+    BitXor,BitAnd,BitOr,
+    Shl,Shr,
+    Eq, Lt, Le, Ne, Ge, Gt,
+    AddEq,SubEq,MulEq,DivEq,RemEq,
+    BitXorEq,BitAndEq,BitOrEq,ShlEq,ShrEq
+}
+
+impl ShBinOp{
+    pub fn to_string(&self)->&str{
+        match self{
+            ShBinOp::Add=>"+",
+            ShBinOp::Sub=>"-",
+            ShBinOp::Mul=>"*",
+            ShBinOp::Div=>"/",
+            ShBinOp::Rem=>"%",
+            ShBinOp::And=>"&&",
+            ShBinOp::Or=>"||",
+            ShBinOp::BitXor=>"^",
+            ShBinOp::BitAnd=>"&",
+            ShBinOp::BitOr=>"|",
+            ShBinOp::Shl=>"<<",
+            ShBinOp::Shr=>">>",
+            ShBinOp::Eq=>"==",
+            ShBinOp::Lt=>"<",
+            ShBinOp::Le=>"<=",
+            ShBinOp::Ne=>"!=",
+            ShBinOp::Ge=>">=",
+            ShBinOp::Gt=>">",
+            ShBinOp::AddEq=>"+=",
+            ShBinOp::SubEq=>"-=",
+            ShBinOp::MulEq=>"*=",
+            ShBinOp::DivEq=>"/=",
+            ShBinOp::RemEq=>"%=",
+            ShBinOp::BitXorEq=>"^=",
+            ShBinOp::BitAndEq=>"&=",
+            ShBinOp::BitOrEq=>"|=",
+            ShBinOp::ShlEq=>"<<=",
+            ShBinOp::ShrEq=>">>=",
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ShId{
+    pub name:String
+}
+
+#[derive(Clone)]
+pub enum ShLit{
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Bool(bool)
+}
+
+#[derive(Clone)]
+pub struct ShField{
+    pub base:Box<ShExpr>,
+    pub member:String
+}
+
+#[derive(Clone)]
+pub struct ShIndex{
+    pub base:Box<ShExpr>,
+    pub index:Box<ShExpr>
+}
+
+#[derive(Clone)]
+pub struct ShAssign{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>
+}
+
+#[derive(Clone)]
+pub struct ShAssignOp{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>,
+    pub op:ShBinOp
+}
+
+#[derive(Clone)]
+pub struct ShBinary{
+    pub left:Box<ShExpr>,
+    pub right:Box<ShExpr>,
+    pub op:ShBinOp
+}
+
+#[derive(Clone)]
+pub enum ShUnaryOp{
+    Not, Neg
+}
+
+impl ShUnaryOp{
+    pub fn to_string(&self)->&str{
+        match self{
+            ShUnaryOp::Not=>"!",
+            ShUnaryOp::Neg=>"-"
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ShUnary{
+    pub expr:Box<ShExpr>,
+    pub op:ShUnaryOp
+}
+
+#[derive(Clone)]
+pub struct ShParen{
+    pub expr:Box<ShExpr>,
+}
+
+#[derive(Clone)]
+pub enum ShStmt{
+    ShLet(ShLet),
+    ShExpr(ShExpr),
+    ShSemi(ShExpr)
+}
+
+#[derive(Clone)]
+pub struct ShBlock{
+    pub stmts:Vec<Box<ShStmt>>
+}
+
+#[derive(Clone)]
+pub struct ShCall{
+    pub call:String,
+    pub args:Vec<Box<ShExpr>>
+}
+
+#[derive(Clone)]
+pub struct ShIf{
+    pub cond:Box<ShExpr>,
+    pub then_branch:ShBlock,
+    pub else_branch:Option<Box<ShExpr>>,
+}
+
+#[derive(Clone)]
+pub struct ShWhile{
+    pub cond:Box<ShExpr>,
+    pub body:ShBlock,
+}
+
+#[derive(Clone)]
+pub struct ShForLoop{
+    pub iter:String,
+    pub from:Box<ShExpr>,
+    pub to:Box<ShExpr>,
+    pub body:ShBlock
+}
+
+#[derive(Clone)]
+pub struct ShReturn{
+    pub expr:Option<Box<ShExpr>>
+}
+
+#[derive(Clone)]
+pub struct ShBreak{
+}
+
+#[derive(Clone)]
+pub struct ShContinue{
+}
+
+#[derive(Clone)]
+pub struct ShLet{
+    pub name:String,
+    pub ty:String,
+    pub init:Box<ShExpr>
+}
+
 
 
 #[derive(Default,Clone)]
@@ -227,17 +300,199 @@ impl Shader{
         self.asts.push(ast);
     }
 
-    pub fn new()->Shader{
-        Shader{..Default::default()}
-    }
-
     pub fn def()->Shader{
         let sh = Shader{..Default::default()};
+       
         // lets add the default library
         sh
     }
 
-    pub fn def_constants(&mut self){
+    // find a function
+    pub fn find_fn(&self, name:&str)->Option<&ShFn>{
+        for ast in self.asts.iter().rev(){
+            for shfn in ast.fns{
+                if shfn.name == name{
+                    return Some(&shfn)
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_var(&self, name:&str)->Option<&ShVar>{
+        for ast in self.asts.iter().rev(){
+            for shvar in ast.vars{
+                if shvar.name == name{
+                    return Some(&shvar)
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_const(&self, name:&str)->Option<&ShConst>{
+        for ast in self.asts.iter().rev(){
+            for shconst in ast.consts{
+                if shconst.name == name{
+                    return Some(&shconst)
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_type(&self, name:&str)->Option<&ShType>{
+        for ast in self.asts.iter().rev(){
+            for shtype in ast.types{
+                if shtype.name == name{
+                    return Some(&shtype)
+                }
+            }
+        }
+        None
+    }
+
+    pub fn def_default(&mut self){
+        self.asts.push(
+            ShAst{
+                types:vec![
+                    ShType{name:"float".to_string(), slots:1, prim:true, fields:Vec::new()},
+                    ShType{name:"int".to_string(), slots:1, prim:true, fields:Vec::new()},
+                    ShType{name:"bool".to_string(), slots:1, prim:true, fields:Vec::new()},
+                    ShType{
+                        name:"vec2".to_string(),
+                        slots:2,
+                        prim:true,
+                        fields:vec![ShTypeField::new("x","float"),ShTypeField::new("y","float")]
+                    },
+                    ShType{
+                        name:"vec3".to_string(),
+                        slots:3,
+                        prim:true,
+                        fields:vec![ShTypeField::new("x","float"),ShTypeField::new("y","float"),ShTypeField::new("z","float")]
+                    },
+                    ShType{
+                        name:"vec4".to_string(),
+                        slots:4,
+                        prim:true,
+                        fields:vec![ShTypeField::new("x","float"),ShTypeField::new("y","float"),ShTypeField::new("z","float"),ShTypeField::new("w","float")]
+                    },
+                    ShType{
+                        name:"mat2".to_string(),
+                        slots:4,
+                        prim:true,
+                        fields:vec![
+                            ShTypeField::new("a","float"),ShTypeField::new("b","float"),
+                            ShTypeField::new("c","float"),ShTypeField::new("d","float")
+                        ]
+                    },
+                    ShType{
+                        name:"mat3".to_string(),
+                        slots:9,
+                        prim:true,
+                        fields:vec![
+                            ShTypeField::new("a","float"),ShTypeField::new("b","float"),ShTypeField::new("c","float"),
+                            ShTypeField::new("d","float"),ShTypeField::new("e","float"),ShTypeField::new("f","float"),
+                            ShTypeField::new("g","float"),ShTypeField::new("h","float"),ShTypeField::new("i","float")
+                        ]
+                    },
+                    ShType{
+                        name:"mat4".to_string(),
+                        slots:16,
+                        prim:true,
+                        fields:vec![
+                            ShTypeField::new("a","float"),ShTypeField::new("b","float"),ShTypeField::new("c","float"), ShTypeField::new("d","float"),
+                            ShTypeField::new("e","float"),ShTypeField::new("f","float"),ShTypeField::new("g","float"),ShTypeField::new("h","float"),
+                            ShTypeField::new("i","float"),ShTypeField::new("j","float"),ShTypeField::new("k","float"),ShTypeField::new("l","float"),
+                            ShTypeField::new("m","float"),ShTypeField::new("n","float"),ShTypeField::new("o","float"),ShTypeField::new("p","float")
+                        ]
+                    },
+                ],
+                vars:Vec::new(),
+                fns:vec![
+                    // shorthand typed:
+                    // T - generic
+                    // O - optional
+                    // F - float-like (float, vec2, vec3, etc)
+                    // B - bool-vector (bvecn)
+
+                    ShFn{name:"sizeof".to_string(), args:vec![ShFnArg::new("type","T")], ret:"int".to_string(), block:None},
+
+                    ShFn{name:"radians".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"degrees".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"sin".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"cos".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"tan".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"asin".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"acos".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"atan".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","O")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"pow".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"exp".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"log".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"exp2".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"log2".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"sqrt".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"inversesqrt".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"abs".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"sign".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"floor".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"ceil".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"fract".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"mod".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"min".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"max".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"clamp".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("mi","T"),ShFnArg::new("ma","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"mix".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T"),ShFnArg::new("t","F")], ret:"T".to_string(), block:None},
+                    ShFn{name:"step".to_string(), args:vec![ShFnArg::new("e","T"),ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"smoothstep".to_string(), args:vec![ShFnArg::new("e0","F"),ShFnArg::new("e1","F"),ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    
+                    ShFn{name:"length".to_string(), args:vec![ShFnArg::new("x","T")], ret:"float".to_string(), block:None},
+                    ShFn{name:"distance".to_string(), args:vec![ShFnArg::new("p0","T"),ShFnArg::new("p1","T")], ret:"float".to_string(), block:None},
+                    ShFn{name:"dot".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"float".to_string(), block:None},
+                    ShFn{name:"cross".to_string(), args:vec![ShFnArg::new("x","vec3"),ShFnArg::new("y","vec3")], ret:"vec3".to_string(), block:None},
+                    ShFn{name:"normalize".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"faceforward".to_string(), args:vec![ShFnArg::new("n","T"),ShFnArg::new("i","T"),ShFnArg::new("nref","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"reflect".to_string(), args:vec![ShFnArg::new("i","T"),ShFnArg::new("n","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"refract".to_string(), args:vec![ShFnArg::new("i","T"),ShFnArg::new("n","T"),ShFnArg::new("eta","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"matrixCompMult".to_string(), args:vec![ShFnArg::new("a","mat4"),ShFnArg::new("b","mat4")], ret:"mat4".to_string(), block:None},
+
+                    ShFn{name:"lessThan".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"lessThanEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"greaterThan".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"greaterThanEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"equal".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"notEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+
+                    ShFn{name:"any".to_string(), args:vec![ShFnArg::new("x","B")], ret:"bool".to_string(), block:None},
+                    ShFn{name:"all".to_string(), args:vec![ShFnArg::new("x","B")], ret:"bool".to_string(), block:None},
+                    ShFn{name:"not".to_string(), args:vec![ShFnArg::new("x","B")], ret:"B".to_string(), block:None},
+
+                    ShFn{name:"dFdx".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"dFdy".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"fwidth".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+
+                    ShFn{name:"texture2DLod".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
+                    ShFn{name:"texture2DProjLod".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
+                    ShFn{name:"textureCubeLod".to_string(), args:vec![ShFnArg::new("sampler","samplerCube"), ShFnArg::new("coord","vec3"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
+
+                    ShFn{name:"texture2D".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
+                    ShFn{name:"texture2DProj".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
+                    ShFn{name:"textureCube".to_string(), args:vec![ShFnArg::new("sampler","samplerCube"), ShFnArg::new("coord","vec3"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
+                ],
+                consts:Vec::new()
+            }
+        )
+    }
+
+    pub fn def_df(&mut self){
         /*
         self.define("PI","3.141592653589793");
 		self.define("E","2.718281828459045");
@@ -249,9 +504,6 @@ impl Shader{
 		self.define("TORAD","0.017453292519943295");
 		self.define("GOLDEN","1.618033988749895");
         */
-    }
-
-    pub fn def_df(&mut self){
         /*
         self.local("df_pos", Kind::Vec2);
         self.local("df_result", Kind::Vec4);

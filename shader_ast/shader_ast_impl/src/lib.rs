@@ -125,9 +125,7 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
                     return error(arg.span(), "arg type not simple");
                 }
                 args.push(quote!{
-                    ShFnArg{
-                        name:#name.to_string(),
-                        ty:#found_type.to_string()
+                    ShFnArg::new(#name, #found_type)
                     }
                 })
             }
@@ -162,7 +160,7 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
             name:#name.to_string(),
             args:vec![#(#args),*],
             ret:#return_type.to_string(),
-            block:#block
+            block:Some(#block)
         }
     }
 }
@@ -321,19 +319,19 @@ fn generate_expr(expr:Expr)->TokenStream{
             match expr.lit{
                 Lit::Str(lit)=>{
                     let value = lit.value();
-                    return quote!{ShExpr::ShLit(ShLit::ShLitStr(#value.to_string()))}
+                    return quote!{ShExpr::ShLit(ShLit::Str(#value.to_string()))}
                 }
                 Lit::Int(lit)=>{
                     let value = lit.value() as i64;
-                    return quote!{ShExpr::ShLit(ShLit::ShLitInt(#value))}
+                    return quote!{ShExpr::ShLit(ShLit::Int(#value))}
                 }
                 Lit::Float(lit)=>{
                     let value = lit.value() as f64;
-                    return quote!{ShExpr::ShLit(ShLit::ShLitFloat(#value))}
+                    return quote!{ShExpr::ShLit(ShLit::Float(#value))}
                 }
                 Lit::Bool(lit)=>{
                     let value = lit.value;
-                    return quote!{ShExpr::ShLit(ShLit::ShLitBool(#value))}
+                    return quote!{ShExpr::ShLit(ShLit::Bool(#value))}
                 }
                 _=>{
                     return error(expr.span(), "Unsupported literal for shader")
