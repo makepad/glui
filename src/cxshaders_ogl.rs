@@ -37,9 +37,9 @@ pub struct GLShader{
     pub geom_vb: gl::types::GLuint,
     pub geom_ib: gl::types::GLuint,
     pub assembled_shader: AssembledShader,
-    pub dr_uniforms: Vec<GLUniform>,
-    pub dl_uniforms: Vec<GLUniform>,
-    pub cx_uniforms: Vec<GLUniform>,
+    pub uniforms_dr: Vec<GLUniform>,
+    pub uniforms_dl: Vec<GLUniform>,
+    pub uniforms_cx: Vec<GLUniform>,
     pub samplers: Vec<GLSampler>
 }
 
@@ -59,7 +59,7 @@ struct Glsl{
     ty:String
 }
 
-struct GlslErr{
+pub struct GlslErr{
     msg:String
 }
 
@@ -69,15 +69,16 @@ struct GlslDecl{
 }
 
 struct GlslCx<'a>{
+    depth:usize,
     shader:&'a Shader,
     scope:Vec<GlslDecl>,
     fndeps:Vec<String>
 }
 
 impl<'a> GlslCx<'a>{
-    fn scan_scope(&self, name:&str)->Option<String>{
+    fn scan_scope(&self, name:&str)->Option<&str>{
         if let Some(decl) = self.scope.iter().find(|i| i.name == name){
-            return Some(decl.ty);
+            return Some(&decl.ty);
         }
         None
     }
@@ -117,13 +118,13 @@ impl ShId{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         // ok so. we have to find our id on
         if let Some(ty) = cx.scan_scope(&self.name){
-            Ok(Glsl{sl:self.name, ty:ty})
+            Ok(Glsl{sl:self.name.to_string(), ty:ty.to_string()})
         }
         else if let Some(cnst) = cx.shader.find_const(&self.name){
-            Ok(Glsl{sl:self.name, ty:cnst.ty})
+            Ok(Glsl{sl:self.name.to_string(), ty:cnst.ty.to_string()})
         } 
         else if let Some(var) = cx.shader.find_var(&self.name){
-            Ok(Glsl{sl:self.name, ty:var.ty})
+            Ok(Glsl{sl:self.name.to_string(), ty:var.ty.to_string()})
         } 
         else{ // id not found.. lets give an error
             Err(GlslErr{
@@ -134,7 +135,7 @@ impl ShId{
 }
 
 impl ShLit{
-    fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
+    fn glsl(&self, _cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         // we do a literal
         match self{
             ShLit::Int(val)=>{
@@ -144,7 +145,12 @@ impl ShLit{
                 Ok(Glsl{sl:format!("\"{}\"", val), ty:"string".to_string()})
             }
             ShLit::Float(val)=>{
-                Ok(Glsl{sl:format!("{}", val), ty:"float".to_string()})
+                if val.ceil() == *val{
+                    Ok(Glsl{sl:format!("{}.0", val), ty:"float".to_string()})
+                }
+                else{
+                    Ok(Glsl{sl:format!("{}", val), ty:"float".to_string()})
+                }
             }
             ShLit::Bool(val)=>{
                 Ok(Glsl{sl:format!("{}", val), ty:"bool".to_string()})
@@ -162,7 +168,7 @@ impl ShField{
         if let Some(field) = shty.fields.iter().find(|i| i.name == self.member){
             Ok(Glsl{
                 sl:format!("{}.{}", base.sl, self.member),
-                ty:field.ty
+                ty:field.ty.to_string()
             })
         }
         else{
@@ -214,9 +220,10 @@ impl ShAssignOp{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         let left = self.left.glsl(cx)?;
         let right = self.right.glsl(cx)?;
+
         if left.ty != right.ty{
             Err(GlslErr{
-                msg:format!("Left type {} not the same as right {} in assign {}={}", left.ty, right.ty, left.sl, right.sl)
+                msg:format!("Left type {} not the same as right {} in assign op {}{}{}", left.ty, self.op.to_string(), right.ty, left.sl, right.sl)
             })
         }
         else{
@@ -233,9 +240,23 @@ impl ShBinary{
         let left = self.left.glsl(cx)?;
         let right = self.right.glsl(cx)?;
         if left.ty != right.ty{
-            Err(GlslErr{
-                msg:format!("Left type {} not the same as right {} in assign {}={}", left.ty, right.ty, left.sl, right.sl)
-            })
+            if left.ty == "float" && (right.ty == "vec2" || right.ty == "vec3" || right.ty == "vec4"){
+                Ok(Glsl{
+                    sl:format!("{}{}{}", left.sl, self.op.to_string(), right.sl),
+                    ty:right.ty
+                })
+            }
+            else if right.ty == "float" && (left.ty == "vec2" || left.ty == "vec3" || left.ty == "vec4"){
+                Ok(Glsl{
+                    sl:format!("{}{}{}", left.sl, self.op.to_string(), right.sl),
+                    ty:left.ty
+                })
+            }
+            else{
+                Err(GlslErr{
+                    msg:format!("Left type {} not the same as right {} in binary op {}{}{}", left.ty, right.ty, left.sl, self.op.to_string(), right.sl)
+                })
+            }
         }
         else{
             Ok(Glsl{
@@ -268,10 +289,14 @@ impl ShParen{
 
 impl ShBlock{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let sl = String::new();
+        let mut sl = String::new();
         sl.push_str("{\n");
-        for stmt in self.stmts{
-            match *stmt{
+        cx.depth += 1;
+        for stmt in &self.stmts{
+            for _i in 0..cx.depth{
+                sl.push_str("  ");
+            }
+            match &**stmt{
                 ShStmt::ShLet(stmt) => {
                     let out = stmt.glsl(cx)?;
                     sl.push_str(&out.sl);
@@ -287,6 +312,7 @@ impl ShBlock{
             }
             sl.push_str(";\n");
         }
+        cx.depth -= 1;
         sl.push_str("}");
         Ok(Glsl{
             sl:sl,
@@ -298,17 +324,16 @@ impl ShBlock{
 impl ShCall{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         // we have a call, look up the call type on cx
+        let mut out = String::new();
         if let Some(shfn) = cx.shader.find_fn(&self.call){
-            if let Some(block) = shfn.block{ // not internal
+            if let Some(_block) = &shfn.block{ // not internal, so its a dep
                 if cx.fndeps.iter().find(|i| **i == self.call).is_none(){
-                    cx.fndeps.push(self.call);
+                    cx.fndeps.push(self.call.clone());
                 }
-            }
-            let out = String::new();
+            };
             out.push_str(&self.call);
             out.push_str("(");
             // lets check our args and compose return type
-            let args_gl = Vec::new();
             let mut gen_t = "".to_string();
             // loop over args and typecheck / fill in generics
             for (i, arg) in self.args.iter().enumerate(){
@@ -373,7 +398,7 @@ impl ShCall{
                 gen_t
             }
             else{
-                shfn.ret
+                shfn.ret.clone()
             };
             out.push_str(")");
             // check our arg types
@@ -386,9 +411,29 @@ impl ShCall{
             })
         }
         else{
-            Err(GlslErr{
-                msg:format!("Cannot find function {}", self.call)
-            })
+            // its a constructor call
+            if let Some(glty) = cx.shader.find_type(&self.call){
+                out.push_str(&self.call);
+                out.push_str("(");
+                // TODO check args
+                for (i, arg) in self.args.iter().enumerate(){
+                    let arg_gl = arg.glsl(cx)?;
+                    if i != 0{
+                        out.push_str(", ");
+                    }
+                    out.push_str(&arg_gl.sl);
+                }
+                out.push_str(")");
+                Ok(Glsl{
+                    sl:out,
+                    ty:glty.name.clone()
+                })
+            }
+            else{
+                Err(GlslErr{
+                    msg:format!("Cannot find function {}", self.call)
+                })
+            }
         }
         
     }
@@ -396,7 +441,7 @@ impl ShCall{
 
 impl ShIf{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let out = "".to_string();
+        let mut out = "".to_string();
         out.push_str("if(");
         let cond = self.cond.glsl(cx)?;
         out.push_str(&cond.sl);
@@ -405,7 +450,7 @@ impl ShIf{
         let then = self.then_branch.glsl(cx)?;
         
         out.push_str(&then.sl);
-        if let Some(else_branch) = self.else_branch{
+        if let Some(else_branch) = &self.else_branch{
             let else_gl = else_branch.glsl(cx)?;
             out.push_str("else ");
             out.push_str(&else_gl.sl);
@@ -420,7 +465,7 @@ impl ShIf{
 
 impl ShWhile{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let out = "".to_string();
+        let mut out = "".to_string();
         out.push_str("while(");
         let cond = self.cond.glsl(cx)?;
         out.push_str(&cond.sl);
@@ -439,7 +484,7 @@ impl ShWhile{
 
 impl ShForLoop{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let out = "".to_string();
+        let mut out = "".to_string();
 
         out.push_str("for(int ");
         out.push_str(&self.iter);
@@ -472,8 +517,8 @@ impl ShForLoop{
 
 impl ShReturn{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let out = "".to_string();
-        if let Some(expr) = self.expr{
+        let mut out = "".to_string();
+        if let Some(expr) = &self.expr{
             let expr_gl = expr.glsl(cx)?;
             out.push_str("return ");
             out.push_str(&expr_gl.sl);
@@ -489,7 +534,7 @@ impl ShReturn{
 }
 
 impl ShBreak{
-    fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
+    fn glsl(&self, _cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         Ok(Glsl{
             sl:"break".to_string(),
             ty:"void".to_string()
@@ -498,7 +543,7 @@ impl ShBreak{
 }
 
 impl ShContinue{
-    fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
+    fn glsl(&self, _cx:&mut GlslCx)->Result<Glsl,GlslErr>{
         Ok(Glsl{
             sl:"continue".to_string(),
             ty:"void".to_string()
@@ -508,12 +553,27 @@ impl ShContinue{
 
 impl ShLet{
     fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
-        let out = "".to_string();
-        out.push_str(&self.ty);
+        let mut out = "".to_string();
+        let init = self.init.glsl(cx)?;
+
+        let ty = init.ty.clone();
+        if self.ty != "" && self.ty != init.ty{
+            return Err(GlslErr{
+                msg:format!("Let definition {} type {} is different from initializer {}", self.name, self.ty, init.ty)
+            })
+        }
+
+        out.push_str(&ty);
         out.push_str(" ");
         out.push_str(&self.name);
         out.push_str(" = ");
-        let init = self.init.glsl(cx)?;
+        
+        // lets define our identifier on scope
+        cx.scope.push(GlslDecl{
+            name:self.name.clone(),
+            ty:init.ty.clone()
+        });
+
         out.push_str(&init.sl);
         Ok(Glsl{
             sl:out,
@@ -522,23 +582,55 @@ impl ShLet{
     }
 }
 
+impl ShFn{
+    fn glsl(&self, cx:&mut GlslCx)->Result<Glsl,GlslErr>{
+        let mut out = "".to_string();
+        out.push_str(&self.ret);
+        out.push_str(" ");
+        out.push_str(&self.name);
+        out.push_str("(");
+        for (i, arg) in self.args.iter().enumerate(){
+            if i != 0{
+                out.push_str(", ");
+            }
+            out.push_str(&arg.ty);
+            out.push_str(" ");
+            out.push_str(&arg.name);
+            cx.scope.push(GlslDecl{
+                name:arg.name.clone(),
+                ty:arg.ty.clone()
+            });
+        };
+        out.push_str(")");
+        if let Some(block) = &self.block{
+            let block = block.glsl(cx)?;
+            out.push_str(&block.sl);
+        };
+        Ok(Glsl{
+            sl:out,
+            ty:self.name.clone()
+        })
+    }
+}
+
+#[derive(Default,Clone)]
+pub struct AssembledFn{
+    pub sl: String,
+    pub fndeps: Vec<String>
+}
+
+
 #[derive(Default,Clone)]
 pub struct AssembledShader{
+    pub geometry_slots:usize,
+    pub instance_slots:usize,
+    pub geometry_attribs:usize,
+    pub instance_attribs:usize,
 
-    pub functions:HashMap<String, ShFn>,
-    pub uniforms_dr:Vec<ShVar>,
-    pub uniforms_dl:Vec<ShVar>,
-    pub uniforms_cx:Vec<ShVar>,
-    
-    pub geom_slots:usize,
-    pub inst_slots:usize,
-    pub geom_attribs:usize,
-    pub inst_attribs:usize,
-
-    //pub dr_uniforms: Vec<ShaderUniform>,
-    //pub dl_uniforms: Vec<ShaderUniform>,
-    //pub cx_uniforms: Vec<ShaderUniform>,
-    pub samplers:Vec<ShaderSampler>,
+    pub uniforms_dr: Vec<ShVar>,
+    pub uniforms_dl: Vec<ShVar>,
+    pub uniforms_cx: Vec<ShVar>,
+    pub samplers_2d:Vec<ShVar>,
 
     pub fragment:String,
     pub vertex:String
@@ -571,13 +663,14 @@ impl CxShaders{
     pub fn compile_all_shaders(&mut self){
         for sh in &self.shaders{
             let glsh = Self::compile_shader(&sh);
-            if let Some(glsh) = glsh{
+            if let Ok(glsh) = glsh{
                 self.glshaders.push(GLShader{
                     shader_id:self.glshaders.len(),
                     ..glsh
                 });
             }
-            else{
+            else if let Err(err) = glsh{
+                println!("GOT ERROR: {}", err.msg);
                 self.glshaders.push(
                     GLShader{..Default::default()}
                 )
@@ -654,7 +747,7 @@ impl CxShaders{
         attribs
     }
 
-    pub fn compile_get_uniforms(program:gl::types::GLuint, unis:&Vec<ShaderUniform>)->Vec<GLUniform>{
+    pub fn compile_get_uniforms(program:gl::types::GLuint, sh:&Shader, unis:&Vec<ShVar>)->Vec<GLUniform>{
         let mut gl_uni = Vec::new();
         for uni in unis{
             let mut name0 = "".to_string();
@@ -664,14 +757,14 @@ impl CxShaders{
                 gl_uni.push(GLUniform{
                     loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
                     name:uni.name.clone(),
-                    size:uni.slots
+                    size:sh.get_type_slots(&uni.ty)
                 })
             }
         }
         gl_uni
     }
 
-    pub fn compile_get_samplers(program:gl::types::GLuint, sams:&Vec<ShaderSampler>)->Vec<GLSampler>{
+    pub fn compile_get_samplers_2d(program:gl::types::GLuint, sams:&Vec<ShVar>)->Vec<GLSampler>{
         let mut gl_samplers = Vec::new();
         for sam in sams{
             let mut name0 = "".to_string();
@@ -688,21 +781,435 @@ impl CxShaders{
         gl_samplers
     }
 
-    pub fn assemble_shader(sh:&Shader)->AssembledShader{
+    pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, GlslErr>{
+
+        let mut cx = GlslCx{
+            depth:0,
+            shader:sh,
+            scope:Vec::new(),
+            fndeps:Vec::new()
+        };
+        cx.fndeps.push(entry_name.to_string());
+
+        let mut fn_done = Vec::<Glsl>::new();
+
+        loop{
+
+            // find what deps we haven't done yet
+            let fn_not_done = cx.fndeps.iter().find(|cxfn|{
+                if let Some(_done) = fn_done.iter().find(|i| i.ty == **cxfn){
+                    false
+                }
+                else{
+                    true
+                }
+            });
+            // do that dep.
+            if let Some(fn_not_done) = fn_not_done{
+                let fn_to_do = sh.find_fn(fn_not_done);
+                if let Some(fn_to_do) = fn_to_do{
+                    cx.scope.clear();
+                    let result = fn_to_do.glsl(&mut cx)?;
+                    fn_done.push(result);
+                }
+                else{
+                    return Err(GlslErr{msg:format!("Cannot find entry function {}", fn_not_done)})
+                }
+            }
+            else{
+                break;
+            }
+        }
+        // ok lets reverse concatinate it
+        let mut out = String::new();
+        for fnd in fn_done.iter().rev(){
+            out.push_str(&fnd.sl);
+            out.push_str("\n");
+        }
+
+        Ok(out)
+    }
+
+    pub fn assemble_uniforms(unis:&Vec<ShVar>)->String{
+        let mut out = String::new();
+        for uni in unis{
+            out.push_str("uniform ");
+            out.push_str(&uni.ty);
+            out.push_str(" ");
+            out.push_str(&uni.name);
+            out.push_str(";\n")
+        };
+        out
+    }
+    
+    fn ceil_div4(base:usize)->usize{
+        let r = base >> 2;
+        if base&3 != 0{
+            return r + 1
+        }
+        r
+    }
+
+    pub fn assemble_samplers_2d(unis:&Vec<ShVar>)->String{
+        let mut out = String::new();
+        for uni in unis{
+            out.push_str("uniform sampler2D ");
+            out.push_str(&uni.name);
+            out.push_str(";\n")
+        };
+        out
+    }
+
+    fn assemble_vartype(i:usize, total:usize, left:usize)->String{
+        if i == total - 1{
+            match left{
+                1=>"float",
+                2=>"vec2",
+                3=>"vec3",
+                _=>"vec4"
+            }.to_string()
+        }
+        else{
+            "vec4".to_string()
+        }
+    }
+    
+
+    fn assemble_varblock(thing: &str, base: &str, slots:usize)->String{
+        // ok lets do a ceil
+        let mut out = String::new();
+        let total = Self::ceil_div4(slots);
+        for i in 0..total{
+            out.push_str(thing);
+            out.push_str(" ");
+            out.push_str(&Self::assemble_vartype(i, total, slots&3));
+            out.push_str(" ");
+            out.push_str(base);
+            out.push_str(&i.to_string());
+            out.push_str(";\n");
+        }
+        out
+    }
+
+    fn assemble_vardef(var:&ShVar)->String{
+        // ok lets do a ceil
+        let mut out = String::new();
+        out.push_str(&var.ty);
+        out.push_str(" ");
+        out.push_str(&var.name);
+        out.push_str(";\n");
+        out
+    }
+
+    fn assemble_unpack(base: &str, slot:usize, total_slots:usize,sv:&ShVar)->String{
+        let mut out = String::new();
+        // ok we have the slot we start at
+        out.push_str("    ");
+        out.push_str(&sv.name);
+        out.push_str("=");
+        let id = (slot)>>2;
+
+        // just splat directly
+        if sv.ty == "vec2"{
+            match slot&3{
+                0=>{
+                    out.push_str(base);
+                    out.push_str(&id.to_string());
+                    out.push_str(".xy;\r\n");
+                    return out
+                }
+                1=>{
+                    out.push_str(base);
+                    out.push_str(&id.to_string());
+                    out.push_str(".yz;\r\n");
+                    return out
+                }
+                2=>{
+                    out.push_str(base);
+                    out.push_str(&id.to_string());
+                    out.push_str(".zw;\r\n");
+                    return out
+                }
+                _=>()            
+            }
+        }
+        if sv.ty == "vec3"{
+            match slot&3{
+                0=>{
+                    out.push_str(base);
+                    out.push_str(&id.to_string());
+                    out.push_str(".xyz;\r\n");
+                    return out
+                }
+                1=>{
+                    out.push_str(base);
+                    out.push_str(&id.to_string());
+                    out.push_str(".yzw;\r\n");
+                    return out
+                }            
+                _=>()            
+            }
+        }        
+        if sv.ty == "vec4"{
+            if slot&3 == 0{
+                out.push_str(base);
+                out.push_str(&id.to_string());
+                out.push_str(".xyzw;\r\n");
+                return out
+            }
+        }          
+        if sv.ty != "float"{
+            out.push_str(&sv.ty);
+            out.push_str("(");       
+        }
+
+        // splat via loose props
+        let svslots = match sv.ty.as_ref(){
+            "float"=>1,
+            "vec2"=>2,
+            "vec3"=>3,
+            _=>4
+        };
+
+        for i in 0..svslots{
+            if i != 0{
+                out.push_str(", ");
+            }
+            out.push_str(base);
+
+            let id = (slot+i)>>2;
+            let ext = (slot+i)&3;
+
+            out.push_str(&id.to_string());
+            out.push_str(
+                match ext{
+                    0=>{
+                        if (id == total_slots>>2) && total_slots&3 == 1{
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
+        }
+        if sv.ty != "float"{
+            out.push_str(")");
+        }
+        out.push_str(";\n");
+        out
+    }
+
+    fn assemble_pack_chunk(base: &str, id:usize, chunk:&str, sv:&ShVar)->String{
+        let mut out = String::new();
+        out.push_str("    ");
+        out.push_str(base);
+        out.push_str(&id.to_string());
+        out.push_str(chunk);
+        out.push_str(&sv.name);
+        out.push_str(";\n");
+        out
+    }
+
+    fn assemble_pack(base: &str, slot:usize, total_slots:usize,sv:&ShVar)->String{
+        // now we go the other way. we take slot and assign ShaderVar into it
+        let mut out = String::new();
+        let id = (slot)>>2;
+
+        // just splat directly
+        if sv.ty == "vec2"{
+            match slot&3{
+                0=>return Self::assemble_pack_chunk(base, id, ".xy =", &sv),
+                1=>return Self::assemble_pack_chunk(base, id, ".yz =", &sv),
+                2=>return Self::assemble_pack_chunk(base, id, ".zw =", &sv),
+                _=>()            
+            }
+        }
+        if sv.ty == "vec3"{
+            match slot&3{
+                0=>return Self::assemble_pack_chunk(base, id, ".xyz =", &sv),
+                1=>return Self::assemble_pack_chunk(base, id, ".yzw =", &sv),
+                _=>()            
+            }
+        }        
+        if sv.ty == "vec4"{
+            if slot&3 == 0{
+                return Self::assemble_pack_chunk(base, id, ".xyzw =", &sv);
+            }
+        }          
+
+       let svslots = match sv.ty.as_ref(){
+            "float"=>1,
+            "vec2"=>2,
+            "vec3"=>3,
+            _=>4
+        };
         
-        let mut ash = AssembledShader{..Default::default()};
-        
-        // we can fetch functions on our shader
+        for i in 0..svslots{
+            out.push_str("    ");
+            out.push_str(base);
+            let id = (slot+i)>>2;
+            let ext = (slot+i)&3;
+            out.push_str(&id.to_string());
+            out.push_str(
+                match ext{
+                    0=>{
+                        if (id == total_slots>>2) && total_slots&3 == 1{ // we are at last slot
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
+            out.push_str(" = ");
+            out.push_str(&sv.name);
+            out.push_str(
+                match i{
+                    0=>{
+                        if sv.ty == "float"{
+                            ""
+                        }
+                        else{
+                            ".x"
+                        }
+                    }
+                    1=>".y",
+                    2=>".z",
+                    _=>".w"
+                }
+            );
+            out.push_str(";\r\n");
+        }
+        out
+    }
+
+    pub fn assemble_shader(sh:&Shader)->Result<AssembledShader, GlslErr>{
+        let mut vtx_out = "#version 100\nprecision highp float;\n".to_string();
+        // #extension GL_OES_standard_derivatives : enable
+        let mut pix_out = "#version 100\nprecision highp float;\n".to_string();
+
+        // ok now define samplers from our sh. 
+        let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
+        let geometries = sh.flat_vars(ShVarStore::Geometry);
+        let instances = sh.flat_vars(ShVarStore::Instance);
+        let varyings = sh.flat_vars(ShVarStore::Varying);
+        let locals = sh.flat_vars(ShVarStore::Local);
+        let uniforms_cx = sh.flat_vars(ShVarStore::UniformCx);
+        let uniforms_dl = sh.flat_vars(ShVarStore::UniformDl);
+        let uniforms_dr = sh.flat_vars(ShVarStore::Uniform);
+
+        // lets count the slots
+        let geometry_slots = sh.compute_slot_total(&geometries);
+        let instance_slots = sh.compute_slot_total(&instances);
+        let varying_slots = sh.compute_slot_total(&varyings);
+        let mut shared = String::new();
+        shared.push_str("//Context uniforms\n");
+        shared.push_str(&Self::assemble_uniforms(&uniforms_cx));
+        shared.push_str("//DrawList uniforms\n");
+        shared.push_str(&Self::assemble_uniforms(&uniforms_dl));
+        shared.push_str("//Draw uniforms\n");
+        shared.push_str(&Self::assemble_uniforms(&uniforms_dr));
+        shared.push_str("//Samplers2D\n");
+        shared.push_str(&Self::assemble_samplers_2d(&samplers_2d));
+        shared.push_str("// Varyings\n");
+        shared.push_str(&Self::assemble_varblock("varying", "varying", varying_slots));
+
+        for local in &locals{shared.push_str(&Self::assemble_vardef(&local));}
+
+        pix_out.push_str(&shared);
+        vtx_out.push_str(&shared);
+
+        let mut vtx_main = "void main(){\n".to_string();
+        let mut pix_main = "void main(){\n".to_string();
+
+        vtx_out.push_str("// Geometry attributes\n");
+        vtx_out.push_str(&Self::assemble_varblock("attribute", "geomattr", geometry_slots));
+        let mut slot_id = 0;
+        for geometry in &geometries{
+            vtx_out.push_str(&Self::assemble_vardef(&geometry));
+            vtx_main.push_str(&Self::assemble_unpack("geomattr", slot_id, geometry_slots, &geometry));
+            slot_id += sh.get_type_slots(&geometry.ty);
+        }
+
+        vtx_out.push_str("// Instance attributes\n");
+        vtx_out.push_str(&Self::assemble_varblock("attribute", "instattr", instance_slots));
+        let mut slot_id = 0;
+        for instance in &instances{
+            vtx_out.push_str(&Self::assemble_vardef(&instance));
+            vtx_main.push_str(&Self::assemble_unpack("instattr", slot_id, instance_slots, &instance));
+            slot_id += sh.get_type_slots(&instance.ty);
+        }
+
+        vtx_main.push_str("\n    gl_Position = vertex();\n");
+        vtx_main.push_str("\n    // Varying packing\n");
+
+        pix_main.push_str("\n    // Varying unpacking\n");
+
+        // alright lets pack/unpack varyings
+        let mut slot_id = 0;
+        for vary in &varyings{
+            // only if we aren't already a geom/instance var
+            if geometries.iter().find(|v|v.name == vary.name).is_none() &&
+               instances.iter().find(|v|v.name == vary.name).is_none(){
+                vtx_out.push_str(&Self::assemble_vardef(&vary));
+            } 
+            pix_out.push_str(&Self::assemble_vardef(&vary));
+            // pack it in the vertexshader
+            vtx_main.push_str( &Self::assemble_pack("varying", slot_id, varying_slots, &vary));
+            // unpack it in the pixelshader
+            pix_main.push_str( &Self::assemble_unpack("varying", slot_id, varying_slots, &vary));
+            slot_id += sh.get_type_slots(&vary.ty);
+        }
+
+        pix_main.push_str("\n    gl_FragColor = pixel();\n");
+        vtx_main.push_str("\n}\n\0");
+        pix_main.push_str("\n}\n\0");
+
+        pix_out.push_str("//Function defs\n");
+        let pix_fns = Self::assemble_fn_and_deps(sh, "pixel")?;
+        pix_out.push_str(&pix_fns);
+
+        vtx_out.push_str("//Function defs\n");
+        let vtx_fns = Self::assemble_fn_and_deps(sh, "vertex")?;
+        vtx_out.push_str(&vtx_fns);
+
+        vtx_out.push_str("//Main function\n");
+        vtx_out.push_str(&vtx_main);
+
+        pix_out.push_str("//Main function\n");
+        pix_out.push_str(&pix_main);
+
+        println!("---------- Pixelshader:  ---------\n{}", pix_out);
+        println!("---------- Vertexshader:  ---------\n{}", vtx_out);
 
         // we can also flatten our uniform variable set
         
         // lets composite our ShAst structure into a set of methods
-        
-        return ash;
+        Ok(AssembledShader{
+            geometry_slots:geometry_slots,
+            instance_slots:instance_slots,
+            geometry_attribs:Self::ceil_div4(geometry_slots),
+            instance_attribs:Self::ceil_div4(instance_slots),
+            uniforms_dr:uniforms_dr,
+            uniforms_dl:uniforms_dl,
+            uniforms_cx:uniforms_cx,
+            samplers_2d:samplers_2d,
+            fragment:pix_out,
+            vertex:vtx_out
+        })
     }
 
-    pub fn compile_shader(sh:&Shader)->Option<GLShader>{
-        let ash = Self::assemble_shader(sh);
+    pub fn compile_shader(sh:&Shader)->Result<GLShader, GlslErr>{
+        let ash = Self::assemble_shader(sh)?;
         // now we have a pixel and a vertex shader
         // so lets now pass it to GL
         unsafe{
@@ -711,22 +1218,18 @@ impl CxShaders{
             gl::ShaderSource(vs, 1, [ash.vertex.as_ptr() as *const _].as_ptr(), ptr::null());
             gl::CompileShader(vs);
             if let Some(error) = Self::compile_has_shader_error(true, vs, &ash.vertex){
-                println!(
-                    "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",
-                    error
-                );
-                return None
+                return Err(GlslErr{
+                    msg:format!("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",error)
+                })
             }
 
             let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
             gl::ShaderSource(fs, 1, [ash.fragment.as_ptr() as *const _].as_ptr(), ptr::null());
             gl::CompileShader(fs);
             if let Some(error) = Self::compile_has_shader_error(true, fs, &ash.fragment){
-                println!(
-                    "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",
-                    error
-                );
-                return None
+                return Err(GlslErr{
+                    msg:format!("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",error)
+                })
             }
 
             let program = gl::CreateProgram();
@@ -734,17 +1237,15 @@ impl CxShaders{
             gl::AttachShader(program, fs);
             gl::LinkProgram(program);
             if let Some(error) = Self::compile_has_shader_error(false, program, ""){
-                println!(
-                    "ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",
-                    error
-                );
-                return None
+                return Err(GlslErr{
+                    msg:format!("ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",error)
+                })
             }
             gl::DeleteShader(vs);
             gl::DeleteShader(fs);
 
-            let geom_attribs = Self::compile_get_attributes(program, "geomattr", ash.geom_slots, ash.geom_attribs);
-            let inst_attribs = Self::compile_get_attributes(program, "instattr", ash.inst_slots, ash.inst_attribs);
+            let geom_attribs = Self::compile_get_attributes(program, "geomattr", ash.geometry_slots, ash.geometry_attribs);
+            let inst_attribs = Self::compile_get_attributes(program, "instattr", ash.instance_slots, ash.instance_attribs);
 
             // lets create static geom and index buffers for this shader
             let mut geom_vb = mem::uninitialized();
@@ -762,16 +1263,16 @@ impl CxShaders{
                             sh.geometry_indices.as_ptr() as *const _, gl::STATIC_DRAW);
 
             // lets fetch the uniform positions for our uniforms
-            return Some(GLShader{
+            return Ok(GLShader{
                 program:program,
                 geom_attribs:geom_attribs,
                 inst_attribs:inst_attribs,
                 geom_vb:geom_vb,
                 geom_ib:geom_ib,
-                //cx_uniforms:Self::compile_get_uniforms(program, &ash.cx_uniforms),
-                //dl_uniforms:Self::compile_get_uniforms(program, &ash.dl_uniforms),
-                //dr_uniforms:Self::compile_get_uniforms(program, &ash.dr_uniforms),
-                samplers:Self::compile_get_samplers(program, &ash.samplers),
+                uniforms_cx:Self::compile_get_uniforms(program, sh, &ash.uniforms_cx),
+                uniforms_dl:Self::compile_get_uniforms(program, sh, &ash.uniforms_dl),
+                uniforms_dr:Self::compile_get_uniforms(program, sh, &ash.uniforms_dr),
+                samplers:Self::compile_get_samplers_2d(program, &ash.samplers_2d),
                 assembled_shader:ash,
                 ..Default::default()
             })

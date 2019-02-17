@@ -50,7 +50,7 @@ const CX_UNI_SIZE:usize = 1;
 impl Cx{
     pub fn def_shader(sh:&mut Shader){
         Shader::def_df(sh);
-        Shader::def_constants(sh);
+        Shader::def_builtins(sh);
         Cx::def_uniforms(sh);
         DrawList::def_uniforms(sh);
     }
@@ -89,12 +89,11 @@ impl Cx{
                 unsafe{
                     gl::UseProgram(shgl.program);
                     gl::BindVertexArray(draw.vao.vao);
-                    let instances = draw.instance.len() / shgl.assembled_shader.inst_slots;
+                    let instances = draw.instance.len() / shgl.assembled_shader.instance_slots;
                     let indices = sh.geometry_indices.len();
-
-                    CxShaders::set_uniform_buffer_fallback(&shgl.cx_uniforms, &self.uniforms);
-                    CxShaders::set_uniform_buffer_fallback(&shgl.dl_uniforms, &draw_list.uniforms);
-                    CxShaders::set_uniform_buffer_fallback(&shgl.dr_uniforms, &draw.uniforms);
+                    CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_cx, &self.uniforms);
+                    CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dl, &draw_list.uniforms);
+                    CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dr, &draw.uniforms);
                     CxShaders::set_samplers(&shgl.samplers, &draw.samplers, &self.textures);
                     gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
                 }

@@ -35,7 +35,7 @@ pub struct ShFn{
     pub block:Option<ShBlock>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum ShVarStore{
     Uniform,
     UniformDl,
@@ -307,10 +307,28 @@ impl Shader{
         sh
     }
 
+    // flatten our
+    pub fn flat_vars(&self, store:ShVarStore)->Vec<ShVar>{
+        let mut ret = Vec::new();
+        for ast in self.asts.iter().rev(){
+            for shvar in &ast.vars{
+                // abusing an enum with flags complicates flattening a bit
+                if shvar.store == store || 
+                    store == ShVarStore::Varying && shvar.store == ShVarStore::GeometryV ||
+                    store == ShVarStore::Varying && shvar.store == ShVarStore::InstanceV ||
+                    store == ShVarStore::Geometry && shvar.store == ShVarStore::GeometryV ||
+                    store == ShVarStore::Instance && shvar.store == ShVarStore::InstanceV{
+                    ret.push(shvar.clone());
+                }
+            }
+        }
+        ret
+    }
+
     // find a function
     pub fn find_fn(&self, name:&str)->Option<&ShFn>{
         for ast in self.asts.iter().rev(){
-            for shfn in ast.fns{
+            for shfn in &ast.fns{
                 if shfn.name == name{
                     return Some(&shfn)
                 }
@@ -321,7 +339,7 @@ impl Shader{
 
     pub fn find_var(&self, name:&str)->Option<&ShVar>{
         for ast in self.asts.iter().rev(){
-            for shvar in ast.vars{
+            for shvar in &ast.vars{
                 if shvar.name == name{
                     return Some(&shvar)
                 }
@@ -332,7 +350,7 @@ impl Shader{
 
     pub fn find_const(&self, name:&str)->Option<&ShConst>{
         for ast in self.asts.iter().rev(){
-            for shconst in ast.consts{
+            for shconst in &ast.consts{
                 if shconst.name == name{
                     return Some(&shconst)
                 }
@@ -343,7 +361,7 @@ impl Shader{
 
     pub fn find_type(&self, name:&str)->Option<&ShType>{
         for ast in self.asts.iter().rev(){
-            for shtype in ast.types{
+            for shtype in &ast.types{
                 if shtype.name == name{
                     return Some(&shtype)
                 }
@@ -352,7 +370,22 @@ impl Shader{
         None
     }
 
-    pub fn def_default(&mut self){
+    pub fn get_type_slots(&self, name:&str)->usize{
+        if let Some(ty) = self.find_type(name){
+            return ty.slots;
+        }
+        0
+    }
+
+    pub fn compute_slot_total(&self, vars:&Vec<ShVar>)->usize{
+        let mut slots:usize = 0;
+        for var in vars{
+            slots += self.get_type_slots(&var.ty);
+        }
+        slots
+    }
+
+    pub fn def_builtins(&mut self){
         self.asts.push(
             ShAst{
                 types:vec![

@@ -548,7 +548,7 @@ fn generate_root(expr:Expr)->TokenStream{
 
             quote!{ 
                 ShAst{
-                    structs:vec![],
+                    types:vec![],
                     vars:vec![#(#vars),*],
                     consts:vec![#(#consts),*],
                     fns:vec![#(#fns),*]
