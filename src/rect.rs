@@ -73,9 +73,6 @@ impl Rect{
     }
 
     pub fn draw_at<'a>(&mut self, cx:&'a mut Cx, x:f32, y:f32, w:f32, h:f32)->&'a mut Draw{
-
-        // how do we write uniforms?
-        //let mut wr = cx.instance(self.shader_id);
         let dr = cx.drawing.instance(cx.shaders.get(self.shader_id));
 
         if dr.first{
