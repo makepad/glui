@@ -126,7 +126,6 @@ fn generate_fn_def(item:ItemFn)->TokenStream{
                 }
                 args.push(quote!{
                     ShFnArg::new(#name, #found_type)
-                    }
                 })
             }
             else{
