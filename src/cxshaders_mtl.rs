@@ -30,7 +30,7 @@ pub struct GLSampler{
 }
 
 #[derive(Default,Clone)]
-pub struct AssembledGLShader{
+pub struct AssembledMtlShader{
     pub geometry_slots:usize,
     pub instance_slots:usize,
     pub geometry_attribs:usize,
@@ -41,8 +41,7 @@ pub struct AssembledGLShader{
     pub uniforms_cx: Vec<ShVar>,
     pub samplers_2d:Vec<ShVar>,
 
-    pub fragment:String,
-    pub vertex:String
+    pub mtlsl:String,
 }
 
 #[derive(Default,Clone)]
@@ -53,7 +52,7 @@ pub struct CompiledShader{
     pub inst_attribs: Vec<GLAttribute>,
     pub geom_vb: gl::types::GLuint,
     pub geom_ib: gl::types::GLuint,
-    pub assembled_shader: AssembledGLShader,
+    pub assembled_shader: AssembledMtlShader,
     pub uniforms_dr: Vec<GLUniform>,
     pub uniforms_dl: Vec<GLUniform>,
     pub uniforms_cx: Vec<GLUniform>,
@@ -67,14 +66,14 @@ pub struct GLTexture2D{
 
 #[derive(Clone, Default)]
 pub struct CxShaders{
-    pub glshaders: Vec<CompiledShader>,
+    pub mtlshaders: Vec<CompiledShader>,
     pub shaders: Vec<Shader>,
 }
 
 impl CxShaders{
 
     pub fn get(&self, id:usize)->&CompiledShader{
-        &self.glshaders[id]
+        &self.mtlshaders[id]
     }
 
     pub fn add(&mut self, sh:Shader)->usize{
@@ -86,172 +85,20 @@ impl CxShaders{
 
     pub fn compile_all_shaders(&mut self){
         for sh in &self.shaders{
-            let glsh = Self::compile_shader(&sh);
-            if let Ok(glsh) = glsh{
-                self.glshaders.push(CompiledShader{
-                    shader_id:self.glshaders.len(),
+            let mtlsh = Self::compile_shader(&sh);
+            if let Ok(glsh) = mtlsh{
+                self.mtlshaders.push(CompiledShader{
+                    shader_id:self.mtlshaders.len(),
                     ..glsh
                 });
             }
-            else if let Err(err) = glsh{
+            else if let Err(err) = mtlsh{
                 println!("GOT ERROR: {}", err.msg);
-                self.glshaders.push(
+                self.mtlshaders.push(
                     CompiledShader{..Default::default()}
                 )
             }
         };
-    }
-
-    pub fn compile_has_shader_error(compile:bool, shader:gl::types::GLuint, source:&str)->Option<String>{
-        unsafe{
-            let mut success = i32::from(gl::FALSE);
-           
-            if compile{
-                gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-            }
-            else{
-                gl::GetProgramiv(shader, gl::LINK_STATUS, &mut success);
-            };
-           
-            if success != i32::from(gl::TRUE) {
-                 let mut info_log = Vec::<u8>::with_capacity(2048);
-                info_log.set_len(2047);
-                for i in 0..2047{
-                    info_log[i] = 0;
-                };
-                if compile{
-                    gl::GetShaderInfoLog(shader, 2048, ptr::null_mut(),
-                        info_log.as_mut_ptr() as *mut gl::types::GLchar)
-                }
-                else{
-                    gl::GetProgramInfoLog(shader, 2048, ptr::null_mut(),
-                        info_log.as_mut_ptr() as *mut gl::types::GLchar)
-                }
-                let mut r = "".to_string();
-                r.push_str(&String::from_utf8(info_log).unwrap());
-                r.push_str("\n");
-                let split = source.split("\n");
-                for (line,chunk) in split.enumerate(){
-                    r.push_str(&(line+1).to_string());
-                    r.push_str(":");
-                    r.push_str(chunk);
-                    r.push_str("\n");
-                }
-                Some(r)
-            }
-            else{
-                None
-            }
-        }
-    }
-
-    pub fn compile_get_attributes(program:gl::types::GLuint, prefix:&str, slots:usize, num_attr:usize)->Vec<GLAttribute>{
-        let mut attribs = Vec::new();
-        let stride = (slots * mem::size_of::<f32>()) as gl::types::GLsizei;
-        for i in 0..num_attr{
-            let mut name = prefix.to_string();
-            name.push_str(&i.to_string());
-            name.push_str("\0");
-            
-            let mut size = ((slots - i*4)) as gl::types::GLsizei;
-            if size > 4{
-                size = 4;
-            }
-            unsafe{
-                attribs.push(
-                    GLAttribute{
-                        loc: gl::GetAttribLocation(program, name.as_ptr() as *const _) as gl::types::GLuint,
-                        offset: (i * 4 * mem::size_of::<f32>()) as i32,
-                        size:  size,
-                        stride: stride
-                    }
-                )
-            }
-        }
-        attribs
-    }
-
-    pub fn compile_get_uniforms(program:gl::types::GLuint, sh:&Shader, unis:&Vec<ShVar>)->Vec<GLUniform>{
-        let mut gl_uni = Vec::new();
-        for uni in unis{
-            let mut name0 = "".to_string();
-            name0.push_str(&uni.name);
-            name0.push_str("\0");
-            unsafe{
-                gl_uni.push(GLUniform{
-                    loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
-                    name:uni.name.clone(),
-                    size:sh.get_type_slots(&uni.ty)
-                })
-            }
-        }
-        gl_uni
-    }
-
-    pub fn compile_get_samplers_2d(program:gl::types::GLuint, sams:&Vec<ShVar>)->Vec<GLSampler>{
-        let mut gl_samplers = Vec::new();
-        for sam in sams{
-            let mut name0 = "".to_string();
-            name0.push_str(&sam.name);
-            name0.push_str("\0");
-            unsafe{
-                gl_samplers.push(GLSampler{
-                    loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
-                    name:sam.name.clone()
-                    //,sampler:sam.sampler.clone()
-                })
-            }
-        }
-        gl_samplers
-    }
-
-    pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, SlErr>{
-
-        let mut cx = SlCx{
-            depth:0,
-            shader:sh,
-            scope:Vec::new(),
-            fndeps:Vec::new()
-        };
-        cx.fndeps.push(entry_name.to_string());
-
-        let mut fn_done = Vec::<Sl>::new();
-
-        loop{
-
-            // find what deps we haven't done yet
-            let fn_not_done = cx.fndeps.iter().find(|cxfn|{
-                if let Some(_done) = fn_done.iter().find(|i| i.ty == **cxfn){
-                    false
-                }
-                else{
-                    true
-                }
-            });
-            // do that dep.
-            if let Some(fn_not_done) = fn_not_done{
-                let fn_to_do = sh.find_fn(fn_not_done);
-                if let Some(fn_to_do) = fn_to_do{
-                    cx.scope.clear();
-                    let result = fn_to_do.sl(&mut cx)?;
-                    fn_done.push(result);
-                }
-                else{
-                    return Err(SlErr{msg:format!("Cannot find entry function {}", fn_not_done)})
-                }
-            }
-            else{
-                break;
-            }
-        }
-        // ok lets reverse concatinate it
-        let mut out = String::new();
-        for fnd in fn_done.iter().rev(){
-            out.push_str(&fnd.sl);
-            out.push_str("\n");
-        }
-
-        Ok(out)
     }
 
     pub fn assemble_uniforms(unis:&Vec<ShVar>)->String{
@@ -516,10 +363,9 @@ impl CxShaders{
         out
     }
 
-    pub fn assemble_shader(sh:&Shader)->Result<AssembledGLShader, SlErr>{
-        let mut vtx_out = "#version 100\nprecision highp float;\n".to_string();
-        // #extension GL_OES_standard_derivatives : enable
-        let mut pix_out = "#version 100\nprecision highp float;\n".to_string();
+    pub fn assemble_shader(sh:&Shader)->Result<AssembledMtlShader, SlErr>{
+        
+        let mut mtl_out = "".to_string();
 
         // ok now define samplers from our sh. 
         let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
@@ -535,6 +381,8 @@ impl CxShaders{
         let geometry_slots = sh.compute_slot_total(&geometries);
         let instance_slots = sh.compute_slot_total(&instances);
         let varying_slots = sh.compute_slot_total(&varyings);
+
+        /*
         let mut shared = String::new();
         shared.push_str("//Context uniforms\n");
         shared.push_str(&Self::assemble_uniforms(&uniforms_cx));
@@ -599,11 +447,11 @@ impl CxShaders{
         pix_main.push_str("\n}\n\0");
 
         pix_out.push_str("//Function defs\n");
-        let pix_fns = Self::assemble_fn_and_deps(sh, "pixel")?;
+        let pix_fns = assemble_fn_and_deps(sh, "pixel")?;
         pix_out.push_str(&pix_fns);
 
         vtx_out.push_str("//Function defs\n");
-        let vtx_fns = Self::assemble_fn_and_deps(sh, "vertex")?;
+        let vtx_fns = assemble_fn_and_deps(sh, "vertex")?;
         vtx_out.push_str(&vtx_fns);
 
         vtx_out.push_str("//Main function\n");
@@ -616,9 +464,9 @@ impl CxShaders{
         println!("---------- Vertexshader:  ---------\n{}", vtx_out);
 
         // we can also flatten our uniform variable set
-        
+        */
         // lets composite our ShAst structure into a set of methods
-        Ok(AssembledGLShader{
+        Ok(AssembledMtlShader{
             geometry_slots:geometry_slots,
             instance_slots:instance_slots,
             geometry_attribs:Self::ceil_div4(geometry_slots),
@@ -627,13 +475,13 @@ impl CxShaders{
             uniforms_dl:uniforms_dl,
             uniforms_cx:uniforms_cx,
             samplers_2d:samplers_2d,
-            fragment:pix_out,
-            vertex:vtx_out
+            mtlsl:mtl_out
         })
     }
 
     pub fn compile_shader(sh:&Shader)->Result<CompiledShader, SlErr>{
         let ash = Self::assemble_shader(sh)?;
+        /*
         // now we have a pixel and a vertex shader
         // so lets now pass it to GL
         unsafe{
@@ -700,7 +548,9 @@ impl CxShaders{
                 assembled_shader:ash,
                 ..Default::default()
             })
-        }
+        }*/
+        
+        Err(SlErr{msg:"NI".to_string()})
     }
 
     pub fn create_vao(shgl:&CompiledShader)->GLInstanceVAO{

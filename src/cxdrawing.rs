@@ -25,7 +25,7 @@ impl CxDrawing{
         &mut self.draw_lists[self.draw_list_id]
     }
 
-    pub fn instance(&mut self, sh:&GLShader)->&mut Draw{
+    pub fn instance(&mut self, sh:&CompiledShader)->&mut Draw{
         let draw_list = &mut self.draw_lists[self.draw_list_id];
         
         // find our drawcall in the filled draws

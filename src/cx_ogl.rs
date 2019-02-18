@@ -142,12 +142,12 @@ impl Cx{
         // lets compile all shaders
         self.shaders.compile_all_shaders();
 
-        while self.running == true{
+        while self.running{
             events_loop.poll_events(|event|{
                 match event{
-                    glutin::Event::WindowEvent{ event, .. } => match event {
-                        glutin::WindowEvent::CloseRequested => self.running = false,
-                        glutin::WindowEvent::Resized(logical_size) => {
+                    winit::Event::WindowEvent{ event, .. } => match event {
+                        winit::WindowEvent::CloseRequested => self.running = false,
+                        winit::WindowEvent::Resized(logical_size) => {
                             let dpi_factor = gl_window.get_hidpi_factor();
                             gl_window.resize(logical_size.to_physical(dpi_factor));
                             // lets resize the fractal framebuffer

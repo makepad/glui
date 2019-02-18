@@ -11,6 +11,18 @@ mod cxshaders;
 #[path="cxtextures_ogl.rs"]
 mod cxtextures;
 
+#[cfg(feature = "mtl")]
+#[path="cx_mtl.rs"]
+mod cx; 
+#[cfg(feature = "mtl")]
+#[path="cxshaders_mtl.rs"]
+mod cxshaders; 
+#[cfg(feature = "mtl")]
+#[path="cxtextures_mtl.rs"]
+mod cxtextures;
+
+mod cxshaders_shared;
+
 // shared modules
 mod cxdrawing;
 mod cxfonts;
