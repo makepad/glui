@@ -84,12 +84,21 @@ pub struct CompiledShader{
 }
 
 #[derive(Default,Clone)]
-pub struct DrawBuffers{
-}
-
-#[derive(Default,Clone)]
 pub struct GLTexture2D{
     pub texture_id: usize
+}
+
+#[derive(Clone, Default)]
+pub struct CxBuffers{
+}
+
+#[derive(Clone, Default)]
+pub struct DrawListBuffers{
+}
+
+
+#[derive(Default,Clone)]
+pub struct DrawBuffers{
 }
 
 #[derive(Clone, Default)]
