@@ -53,7 +53,7 @@ impl Rect{
             let y:float<Instance>;
             let w:float<Instance>;
             let h:float<Instance>;
-            let color:vec4<InstanceV>;
+            let color:vec4<Instance>;
             
             fn my_fn(inv:vec4)->vec4{
                 return inv;

@@ -41,9 +41,7 @@ pub enum ShVarStore{
     UniformDl,
     UniformCx,
     Instance,
-    InstanceV,
     Geometry,
-    GeometryV,
     Sampler2D,
     Local,
     Varying,
@@ -313,11 +311,7 @@ impl Shader{
         for ast in self.asts.iter().rev(){
             for shvar in &ast.vars{
                 // abusing an enum with flags complicates flattening a bit
-                if shvar.store == store || 
-                    store == ShVarStore::Varying && shvar.store == ShVarStore::GeometryV ||
-                    store == ShVarStore::Varying && shvar.store == ShVarStore::InstanceV ||
-                    store == ShVarStore::Geometry && shvar.store == ShVarStore::GeometryV ||
-                    store == ShVarStore::Instance && shvar.store == ShVarStore::InstanceV{
+                if shvar.store == store{
                     ret.push(shvar.clone());
                 }
             }

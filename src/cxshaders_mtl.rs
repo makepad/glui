@@ -1,11 +1,48 @@
 use std::mem;
-use std::ptr;
-use std::collections::HashMap;
 
 use crate::shader::*;
 use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
+
+use metal::*;
+
+impl<'a> SlCx<'a>{
+    pub fn map_type(&self, ty:&str)->String{
+        CxShaders::type_to_metal(ty)
+    }
+
+    pub fn map_var(&mut self, var:&ShVar)->String{
+        let prefix;
+        match var.store{
+            ShVarStore::Uniform=>prefix = "_uni_dr.",
+            ShVarStore::UniformDl=>prefix = "_uni_dl.",
+            ShVarStore::UniformCx=>prefix = "_uni_cx.",
+            ShVarStore::Instance=>{
+                if let SlTarget::Pixel = self.target{
+                    self.auto_vary.push(var.clone());
+                    prefix = "_vary.";
+                }
+                else{
+                    prefix = "_inst.";
+                }
+            },
+            ShVarStore::Geometry=>{
+                if let SlTarget::Pixel = self.target{
+                    self.auto_vary.push(var.clone());
+                    prefix = "_vary.";
+                }
+                else{
+                    prefix = "_geom.";
+                }
+            },
+            ShVarStore::Sampler2D=>prefix = "_sampler_2d.",
+            ShVarStore::Local=>prefix = "_loc.",
+            ShVarStore::Varying=>prefix = "_vary.",
+        }
+        format!("{}{}", prefix, var.name)
+    }
+}
 
 #[derive(Default,Clone)]
 pub struct GLAttribute{
@@ -31,10 +68,10 @@ pub struct GLSampler{
 
 #[derive(Default,Clone)]
 pub struct AssembledMtlShader{
-    pub geometry_slots:usize,
-    pub instance_slots:usize,
-    pub geometry_attribs:usize,
-    pub instance_attribs:usize,
+ //   pub geometry_slots:usize,
+ //   pub instance_slots:usize,
+ //   pub geometry_attribs:usize,
+ //   pub instance_attribs:usize,
 
     pub uniforms_dr: Vec<ShVar>,
     pub uniforms_dl: Vec<ShVar>,
@@ -83,9 +120,9 @@ impl CxShaders{
         id
     }
 
-    pub fn compile_all_shaders(&mut self){
+    pub fn compile_all_shaders(&mut self, device:&Device){
         for sh in &self.shaders{
-            let mtlsh = Self::compile_shader(&sh);
+            let mtlsh = Self::compile_shader(&sh, device);
             if let Ok(glsh) = mtlsh{
                 self.mtlshaders.push(CompiledShader{
                     shader_id:self.mtlshaders.len(),
@@ -101,277 +138,65 @@ impl CxShaders{
         };
     }
 
-    pub fn assemble_uniforms(unis:&Vec<ShVar>)->String{
+    pub fn type_to_packed_metal(ty:&str)->String{
+        match ty.as_ref(){
+            "float"=>"float".to_string(),
+            "vec2"=>"packed_float2".to_string(),
+            "vec3"=>"packed_float3".to_string(),
+            "vec4"=>"packed_float4".to_string(),
+            "mat2"=>"packed_float2x2".to_string(),
+            "mat3"=>"packed_float3x3".to_string(),
+            "mat4"=>"packed_float4x4".to_string(),
+            ty=>ty.to_string()
+        }
+    }
+
+    pub fn type_to_metal(ty:&str)->String{
+        match ty.as_ref(){
+            "float"=>"float".to_string(),
+            "vec2"=>"float2".to_string(),
+            "vec3"=>"float3".to_string(),
+            "vec4"=>"float4".to_string(),
+            "mat2"=>"float2x2".to_string(),
+            "mat3"=>"float3x3".to_string(),
+            "mat4"=>"float4x4".to_string(),
+            ty=>ty.to_string()
+        }
+    }
+
+    pub fn assemble_struct(name:&str, vars:&Vec<ShVar>, packed:bool, field:&str)->String{
         let mut out = String::new();
-        for uni in unis{
-            out.push_str("uniform ");
-            out.push_str(&uni.ty);
+        out.push_str("struct ");
+        out.push_str(name);
+        out.push_str("{\n");
+        out.push_str(field);
+        for var in vars{
+            out.push_str("  ");
+            out.push_str(
+                &if packed{
+                    Self::type_to_packed_metal(&var.ty)
+                }
+                else{
+                    Self::type_to_metal(&var.ty)
+                }
+            );
             out.push_str(" ");
-            out.push_str(&uni.name);
+            out.push_str(&var.name);
             out.push_str(";\n")
         };
-        out
-    }
-    
-    fn ceil_div4(base:usize)->usize{
-        let r = base >> 2;
-        if base&3 != 0{
-            return r + 1
-        }
-        r
-    }
-
-    pub fn assemble_samplers_2d(unis:&Vec<ShVar>)->String{
-        let mut out = String::new();
-        for uni in unis{
-            out.push_str("uniform sampler2D ");
-            out.push_str(&uni.name);
-            out.push_str(";\n")
-        };
-        out
-    }
-
-    fn assemble_vartype(i:usize, total:usize, left:usize)->String{
-        if i == total - 1{
-            match left{
-                1=>"float",
-                2=>"vec2",
-                3=>"vec3",
-                _=>"vec4"
-            }.to_string()
-        }
-        else{
-            "vec4".to_string()
-        }
-    }
-    
-
-    fn assemble_varblock(thing: &str, base: &str, slots:usize)->String{
-        // ok lets do a ceil
-        let mut out = String::new();
-        let total = Self::ceil_div4(slots);
-        for i in 0..total{
-            out.push_str(thing);
-            out.push_str(" ");
-            out.push_str(&Self::assemble_vartype(i, total, slots&3));
-            out.push_str(" ");
-            out.push_str(base);
-            out.push_str(&i.to_string());
-            out.push_str(";\n");
-        }
-        out
-    }
-
-    fn assemble_vardef(var:&ShVar)->String{
-        // ok lets do a ceil
-        let mut out = String::new();
-        out.push_str(&var.ty);
-        out.push_str(" ");
-        out.push_str(&var.name);
-        out.push_str(";\n");
-        out
-    }
-
-    fn assemble_unpack(base: &str, slot:usize, total_slots:usize,sv:&ShVar)->String{
-        let mut out = String::new();
-        // ok we have the slot we start at
-        out.push_str("    ");
-        out.push_str(&sv.name);
-        out.push_str("=");
-        let id = (slot)>>2;
-
-        // just splat directly
-        if sv.ty == "vec2"{
-            match slot&3{
-                0=>{
-                    out.push_str(base);
-                    out.push_str(&id.to_string());
-                    out.push_str(".xy;\r\n");
-                    return out
-                }
-                1=>{
-                    out.push_str(base);
-                    out.push_str(&id.to_string());
-                    out.push_str(".yz;\r\n");
-                    return out
-                }
-                2=>{
-                    out.push_str(base);
-                    out.push_str(&id.to_string());
-                    out.push_str(".zw;\r\n");
-                    return out
-                }
-                _=>()            
-            }
-        }
-        if sv.ty == "vec3"{
-            match slot&3{
-                0=>{
-                    out.push_str(base);
-                    out.push_str(&id.to_string());
-                    out.push_str(".xyz;\r\n");
-                    return out
-                }
-                1=>{
-                    out.push_str(base);
-                    out.push_str(&id.to_string());
-                    out.push_str(".yzw;\r\n");
-                    return out
-                }            
-                _=>()            
-            }
-        }        
-        if sv.ty == "vec4"{
-            if slot&3 == 0{
-                out.push_str(base);
-                out.push_str(&id.to_string());
-                out.push_str(".xyzw;\r\n");
-                return out
-            }
-        }          
-        if sv.ty != "float"{
-            out.push_str(&sv.ty);
-            out.push_str("(");       
-        }
-
-        // splat via loose props
-        let svslots = match sv.ty.as_ref(){
-            "float"=>1,
-            "vec2"=>2,
-            "vec3"=>3,
-            _=>4
-        };
-
-        for i in 0..svslots{
-            if i != 0{
-                out.push_str(", ");
-            }
-            out.push_str(base);
-
-            let id = (slot+i)>>2;
-            let ext = (slot+i)&3;
-
-            out.push_str(&id.to_string());
-            out.push_str(
-                match ext{
-                    0=>{
-                        if (id == total_slots>>2) && total_slots&3 == 1{
-                            ""
-                        }
-                        else{
-                            ".x"
-                        }
-                    }
-                    1=>".y",
-                    2=>".z",
-                    _=>".w"
-                }
-            );
-        }
-        if sv.ty != "float"{
-            out.push_str(")");
-        }
-        out.push_str(";\n");
-        out
-    }
-
-    fn assemble_pack_chunk(base: &str, id:usize, chunk:&str, sv:&ShVar)->String{
-        let mut out = String::new();
-        out.push_str("    ");
-        out.push_str(base);
-        out.push_str(&id.to_string());
-        out.push_str(chunk);
-        out.push_str(&sv.name);
-        out.push_str(";\n");
-        out
-    }
-
-    fn assemble_pack(base: &str, slot:usize, total_slots:usize,sv:&ShVar)->String{
-        // now we go the other way. we take slot and assign ShaderVar into it
-        let mut out = String::new();
-        let id = (slot)>>2;
-
-        // just splat directly
-        if sv.ty == "vec2"{
-            match slot&3{
-                0=>return Self::assemble_pack_chunk(base, id, ".xy =", &sv),
-                1=>return Self::assemble_pack_chunk(base, id, ".yz =", &sv),
-                2=>return Self::assemble_pack_chunk(base, id, ".zw =", &sv),
-                _=>()            
-            }
-        }
-        if sv.ty == "vec3"{
-            match slot&3{
-                0=>return Self::assemble_pack_chunk(base, id, ".xyz =", &sv),
-                1=>return Self::assemble_pack_chunk(base, id, ".yzw =", &sv),
-                _=>()            
-            }
-        }        
-        if sv.ty == "vec4"{
-            if slot&3 == 0{
-                return Self::assemble_pack_chunk(base, id, ".xyzw =", &sv);
-            }
-        }          
-
-       let svslots = match sv.ty.as_ref(){
-            "float"=>1,
-            "vec2"=>2,
-            "vec3"=>3,
-            _=>4
-        };
-        
-        for i in 0..svslots{
-            out.push_str("    ");
-            out.push_str(base);
-            let id = (slot+i)>>2;
-            let ext = (slot+i)&3;
-            out.push_str(&id.to_string());
-            out.push_str(
-                match ext{
-                    0=>{
-                        if (id == total_slots>>2) && total_slots&3 == 1{ // we are at last slot
-                            ""
-                        }
-                        else{
-                            ".x"
-                        }
-                    }
-                    1=>".y",
-                    2=>".z",
-                    _=>".w"
-                }
-            );
-            out.push_str(" = ");
-            out.push_str(&sv.name);
-            out.push_str(
-                match i{
-                    0=>{
-                        if sv.ty == "float"{
-                            ""
-                        }
-                        else{
-                            ".x"
-                        }
-                    }
-                    1=>".y",
-                    2=>".z",
-                    _=>".w"
-                }
-            );
-            out.push_str(";\r\n");
-        }
+        out.push_str("};\n\n");
         out
     }
 
     pub fn assemble_shader(sh:&Shader)->Result<AssembledMtlShader, SlErr>{
         
-        let mut mtl_out = "".to_string();
+        let mut mtl_out = "#include <metal_stdlib>\nusing namespace metal;\n".to_string();
 
         // ok now define samplers from our sh. 
         let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
         let geometries = sh.flat_vars(ShVarStore::Geometry);
         let instances = sh.flat_vars(ShVarStore::Instance);
-        let varyings = sh.flat_vars(ShVarStore::Varying);
+        let mut varyings = sh.flat_vars(ShVarStore::Varying);
         let locals = sh.flat_vars(ShVarStore::Local);
         let uniforms_cx = sh.flat_vars(ShVarStore::UniformCx);
         let uniforms_dl = sh.flat_vars(ShVarStore::UniformDl);
@@ -382,95 +207,100 @@ impl CxShaders{
         let instance_slots = sh.compute_slot_total(&instances);
         let varying_slots = sh.compute_slot_total(&varyings);
 
-        /*
-        let mut shared = String::new();
-        shared.push_str("//Context uniforms\n");
-        shared.push_str(&Self::assemble_uniforms(&uniforms_cx));
-        shared.push_str("//DrawList uniforms\n");
-        shared.push_str(&Self::assemble_uniforms(&uniforms_dl));
-        shared.push_str("//Draw uniforms\n");
-        shared.push_str(&Self::assemble_uniforms(&uniforms_dr));
-        shared.push_str("//Samplers2D\n");
-        shared.push_str(&Self::assemble_samplers_2d(&samplers_2d));
-        shared.push_str("// Varyings\n");
-        shared.push_str(&Self::assemble_varblock("varying", "varying", varying_slots));
+        mtl_out.push_str(&Self::assemble_struct("_Geom", &geometries, true, ""));
+        mtl_out.push_str(&Self::assemble_struct("_Inst", &instances, true, ""));
+        mtl_out.push_str(&Self::assemble_struct("_UniCx", &uniforms_cx, true, ""));
+        mtl_out.push_str(&Self::assemble_struct("_UniDl", &uniforms_dl, true, ""));
+        mtl_out.push_str(&Self::assemble_struct("_UniDr", &uniforms_dr, true, ""));
+        mtl_out.push_str(&Self::assemble_struct("_Loc", &locals, false, ""));
 
-        for local in &locals{shared.push_str(&Self::assemble_vardef(&local));}
 
-        pix_out.push_str(&shared);
-        vtx_out.push_str(&shared);
+        let mut vtx_cx = SlCx{
+            depth:0,
+            target:SlTarget::Vertex,
+            defargs_fn:"thread _Loc &_loc, thread _Vary &_vary, thread _Geom &_geom, thread _Inst &_inst, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
+            defargs_call:"_loc, _vary, _geom, _inst, _uni_cx, _uni_dl, _uni_dr".to_string(),
+            call_prefix:"_".to_string(),
+            shader:sh,
+            scope:Vec::new(),
+            fn_deps:vec!["vertex".to_string()],
+            fn_done:Vec::new(),
+            auto_vary:Vec::new()
+        };
+        let vtx_fns = assemble_fn_and_deps(sh, &mut vtx_cx)?;
+        let mut pix_cx = SlCx{
+            depth:0,
+            target:SlTarget::Pixel,
+            defargs_fn:"thread _Loc &_loc, thread _Vary &_vary, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
+            defargs_call:"_loc, _vary, _uni_cx, _uni_dl, _uni_dr".to_string(),
+            call_prefix:"_".to_string(),
+            shader:sh,
+            scope:Vec::new(),
+            fn_deps:vec!["pixel".to_string()],
+            fn_done:vtx_cx.fn_done,
+            auto_vary:Vec::new()
+        };        
 
-        let mut vtx_main = "void main(){\n".to_string();
-        let mut pix_main = "void main(){\n".to_string();
+        let pix_fns = assemble_fn_and_deps(sh, &mut pix_cx)?;
 
-        vtx_out.push_str("// Geometry attributes\n");
-        vtx_out.push_str(&Self::assemble_varblock("attribute", "geomattr", geometry_slots));
-        let mut slot_id = 0;
-        for geometry in &geometries{
-            vtx_out.push_str(&Self::assemble_vardef(&geometry));
-            vtx_main.push_str(&Self::assemble_unpack("geomattr", slot_id, geometry_slots, &geometry));
-            slot_id += sh.get_type_slots(&geometry.ty);
+        // lets add the auto_vary ones to the varyings struct
+        for auto in &pix_cx.auto_vary{
+            varyings.push(auto.clone());
+        }
+        mtl_out.push_str(&Self::assemble_struct("_Vary", &varyings, false, "  float4 mtl_position [[position]];\n"));
+
+        mtl_out.push_str("//Vertex shader\n");
+        mtl_out.push_str(&vtx_fns);
+        mtl_out.push_str("//Pixel shader\n");
+        mtl_out.push_str(&pix_fns);
+
+        // lets define the vertex shader
+        mtl_out.push_str("vertex _Vary vertex_shader(device _Geom *in_geometries [[buffer(0)]], device _Inst *in_instances [[buffer(1)]], ");
+        mtl_out.push_str("       device _UniCx &_uni_cx [[buffer(2)]], device _UniDl &_uni_dl [[buffer(3)]], device _UniDr &_uni_dr [[buffer(4)]], ");
+        mtl_out.push_str("       uint vtx_id [[vertex_id]], uint inst_id [[instance_id]]){\n");
+        mtl_out.push_str("       _Loc _loc;\n");
+        mtl_out.push_str("       _Vary _vary;\n");
+        mtl_out.push_str("       _Geom _geom = in_geometries[vtx_id];\n");
+        mtl_out.push_str("       _Inst _inst = in_instances[inst_id];\n");
+        mtl_out.push_str("       _vary.mtl_position = _vertex(");
+        mtl_out.push_str(&vtx_cx.defargs_call);
+        mtl_out.push_str(");\n");
+
+        for auto in pix_cx.auto_vary{
+            if let ShVarStore::Geometry = auto.store{
+              mtl_out.push_str("       _vary.");
+              mtl_out.push_str(&auto.name);
+              mtl_out.push_str(" = _geom.");
+              mtl_out.push_str(&auto.name);
+              mtl_out.push_str(";\n");
+            }
+            else if let ShVarStore::Instance = auto.store{
+              mtl_out.push_str("       _vary.");
+              mtl_out.push_str(&auto.name);
+              mtl_out.push_str(" = _inst.");
+              mtl_out.push_str(&auto.name);
+              mtl_out.push_str(";\n");
+            }
         }
 
-        vtx_out.push_str("// Instance attributes\n");
-        vtx_out.push_str(&Self::assemble_varblock("attribute", "instattr", instance_slots));
-        let mut slot_id = 0;
-        for instance in &instances{
-            vtx_out.push_str(&Self::assemble_vardef(&instance));
-            vtx_main.push_str(&Self::assemble_unpack("instattr", slot_id, instance_slots, &instance));
-            slot_id += sh.get_type_slots(&instance.ty);
-        }
+        mtl_out.push_str("       return _vary;");
+        mtl_out.push_str("};\n");
+        // then the fragment shader
 
-        vtx_main.push_str("\n    gl_Position = vertex();\n");
-        vtx_main.push_str("\n    // Varying packing\n");
 
-        pix_main.push_str("\n    // Varying unpacking\n");
 
-        // alright lets pack/unpack varyings
-        let mut slot_id = 0;
-        for vary in &varyings{
-            // only if we aren't already a geom/instance var
-            if geometries.iter().find(|v|v.name == vary.name).is_none() &&
-               instances.iter().find(|v|v.name == vary.name).is_none(){
-                vtx_out.push_str(&Self::assemble_vardef(&vary));
-            } 
-            pix_out.push_str(&Self::assemble_vardef(&vary));
-            // pack it in the vertexshader
-            vtx_main.push_str( &Self::assemble_pack("varying", slot_id, varying_slots, &vary));
-            // unpack it in the pixelshader
-            pix_main.push_str( &Self::assemble_unpack("varying", slot_id, varying_slots, &vary));
-            slot_id += sh.get_type_slots(&vary.ty);
-        }
-
-        pix_main.push_str("\n    gl_FragColor = pixel();\n");
-        vtx_main.push_str("\n}\n\0");
-        pix_main.push_str("\n}\n\0");
-
-        pix_out.push_str("//Function defs\n");
-        let pix_fns = assemble_fn_and_deps(sh, "pixel")?;
-        pix_out.push_str(&pix_fns);
-
-        vtx_out.push_str("//Function defs\n");
-        let vtx_fns = assemble_fn_and_deps(sh, "vertex")?;
-        vtx_out.push_str(&vtx_fns);
-
-        vtx_out.push_str("//Main function\n");
-        vtx_out.push_str(&vtx_main);
-
-        pix_out.push_str("//Main function\n");
-        pix_out.push_str(&pix_main);
-
-        println!("---------- Pixelshader:  ---------\n{}", pix_out);
-        println!("---------- Vertexshader:  ---------\n{}", vtx_out);
-
-        // we can also flatten our uniform variable set
-        */
+        // alright lets make some metal source
+        // we have to compute the 'Varying struct
+        // we have to compute the uniform structs (cx, dl and dr)
+        // also have to compute the geometry struct and the instance struct
+        println!("---- Metal shader -----\n{}",mtl_out);
+       
         // lets composite our ShAst structure into a set of methods
         Ok(AssembledMtlShader{
-            geometry_slots:geometry_slots,
-            instance_slots:instance_slots,
-            geometry_attribs:Self::ceil_div4(geometry_slots),
-            instance_attribs:Self::ceil_div4(instance_slots),
+//            geometry_slots:geometry_slots,
+//            instance_slots:instance_slots,
+//            geometry_attribs:Self::ceil_div4(geometry_slots),
+ //           instance_attribs:Self::ceil_div4(instance_slots),
             uniforms_dr:uniforms_dr,
             uniforms_dl:uniforms_dl,
             uniforms_cx:uniforms_cx,
@@ -479,77 +309,17 @@ impl CxShaders{
         })
     }
 
-    pub fn compile_shader(sh:&Shader)->Result<CompiledShader, SlErr>{
+    pub fn compile_shader(sh:&Shader, device: &Device)->Result<CompiledShader, SlErr>{
         let ash = Self::assemble_shader(sh)?;
-        /*
-        // now we have a pixel and a vertex shader
-        // so lets now pass it to GL
-        unsafe{
-            
-            let vs = gl::CreateShader(gl::VERTEX_SHADER);
-            gl::ShaderSource(vs, 1, [ash.vertex.as_ptr() as *const _].as_ptr(), ptr::null());
-            gl::CompileShader(vs);
-            if let Some(error) = Self::compile_has_shader_error(true, vs, &ash.vertex){
-                return Err(SlErr{
-                    msg:format!("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{}",error)
-                })
-            }
 
-            let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
-            gl::ShaderSource(fs, 1, [ash.fragment.as_ptr() as *const _].as_ptr(), ptr::null());
-            gl::CompileShader(fs);
-            if let Some(error) = Self::compile_has_shader_error(true, fs, &ash.fragment){
-                return Err(SlErr{
-                    msg:format!("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{}",error)
-                })
-            }
+        let options = CompileOptions::new();
+        //let library = device.new_library_with_source(&ash.mtlsl, &options);
+        let library = device.new_library_with_source(&ash.mtlsl, &options);
 
-            let program = gl::CreateProgram();
-            gl::AttachShader(program, vs);
-            gl::AttachShader(program, fs);
-            gl::LinkProgram(program);
-            if let Some(error) = Self::compile_has_shader_error(false, program, ""){
-                return Err(SlErr{
-                    msg:format!("ERROR::SHADER::LINK::COMPILATION_FAILED\n{}",error)
-                })
-            }
-            gl::DeleteShader(vs);
-            gl::DeleteShader(fs);
+        if let Err(err) = library{
+            println!("{}", err);
+        }
 
-            let geom_attribs = Self::compile_get_attributes(program, "geomattr", ash.geometry_slots, ash.geometry_attribs);
-            let inst_attribs = Self::compile_get_attributes(program, "instattr", ash.instance_slots, ash.instance_attribs);
-
-            // lets create static geom and index buffers for this shader
-            let mut geom_vb = mem::uninitialized();
-            gl::GenBuffers(1, &mut geom_vb);
-            gl::BindBuffer(gl::ARRAY_BUFFER, geom_vb);
-            gl::BufferData(gl::ARRAY_BUFFER,
-                            (sh.geometry_vertices.len() * mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                            sh.geometry_vertices.as_ptr() as *const _, gl::STATIC_DRAW);
-
-            let mut geom_ib = mem::uninitialized();
-            gl::GenBuffers(1, &mut geom_ib);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, geom_ib);
-            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
-                            (sh.geometry_indices.len() * mem::size_of::<u32>()) as gl::types::GLsizeiptr,
-                            sh.geometry_indices.as_ptr() as *const _, gl::STATIC_DRAW);
-
-            // lets fetch the uniform positions for our uniforms
-            return Ok(CompiledShader{
-                program:program,
-                geom_attribs:geom_attribs,
-                inst_attribs:inst_attribs,
-                geom_vb:geom_vb,
-                geom_ib:geom_ib,
-                uniforms_cx:Self::compile_get_uniforms(program, sh, &ash.uniforms_cx),
-                uniforms_dl:Self::compile_get_uniforms(program, sh, &ash.uniforms_dl),
-                uniforms_dr:Self::compile_get_uniforms(program, sh, &ash.uniforms_dr),
-                samplers:Self::compile_get_samplers_2d(program, &ash.samplers_2d),
-                assembled_shader:ash,
-                ..Default::default()
-            })
-        }*/
-        
         Err(SlErr{msg:"NI".to_string()})
     }
 

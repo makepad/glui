@@ -1,5 +1,4 @@
 use std::mem;
-use std::ptr;
 use std::ffi::CStr;
 
 use cocoa::base::id as cocoa_id;
@@ -186,7 +185,7 @@ impl Cx{
         let mut pool = unsafe { NSAutoreleasePool::new(cocoa::base::nil) };
         let mut r = 0.0f32;
         
-        self.shaders.compile_all_shaders();
+        self.shaders.compile_all_shaders(&device);
 
         while self.running {
 

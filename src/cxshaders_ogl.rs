@@ -7,6 +7,29 @@ use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
 
+impl<'a> SlCx<'a>{
+    pub fn map_type(&self, ty:&str)->String{
+        ty.to_string()
+    }
+    pub fn map_var(&mut self, var:&ShVar)->String{
+        match var.store{
+            ShVarStore::Instance=>{
+                if let SlTarget::Pixel = self.target{
+                    self.auto_vary.push(var.clone());
+                }
+            },
+            ShVarStore::Geometry=>{
+                if let SlTarget::Pixel = self.target{
+                    self.auto_vary.push(var.clone());
+                }
+            },
+            _=>()
+        }
+        var.name.clone()
+    }
+    
+}
+
 #[derive(Default,Clone)]
 pub struct GLAttribute{
     pub loc:gl::types::GLuint,
@@ -203,55 +226,6 @@ impl CxShaders{
             }
         }
         gl_samplers
-    }
-
-    pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, SlErr>{
-
-        let mut cx = SlCx{
-            depth:0,
-            shader:sh,
-            scope:Vec::new(),
-            fndeps:Vec::new()
-        };
-        cx.fndeps.push(entry_name.to_string());
-
-        let mut fn_done = Vec::<Sl>::new();
-
-        loop{
-
-            // find what deps we haven't done yet
-            let fn_not_done = cx.fndeps.iter().find(|cxfn|{
-                if let Some(_done) = fn_done.iter().find(|i| i.ty == **cxfn){
-                    false
-                }
-                else{
-                    true
-                }
-            });
-            // do that dep.
-            if let Some(fn_not_done) = fn_not_done{
-                let fn_to_do = sh.find_fn(fn_not_done);
-                if let Some(fn_to_do) = fn_to_do{
-                    cx.scope.clear();
-                    let result = fn_to_do.sl(&mut cx)?;
-                    fn_done.push(result);
-                }
-                else{
-                    return Err(SlErr{msg:format!("Cannot find entry function {}", fn_not_done)})
-                }
-            }
-            else{
-                break;
-            }
-        }
-        // ok lets reverse concatinate it
-        let mut out = String::new();
-        for fnd in fn_done.iter().rev(){
-            out.push_str(&fnd.sl);
-            out.push_str("\n");
-        }
-
-        Ok(out)
     }
 
     pub fn assemble_uniforms(unis:&Vec<ShVar>)->String{
@@ -525,11 +499,44 @@ impl CxShaders{
         let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
         let geometries = sh.flat_vars(ShVarStore::Geometry);
         let instances = sh.flat_vars(ShVarStore::Instance);
-        let varyings = sh.flat_vars(ShVarStore::Varying);
+        let mut varyings = sh.flat_vars(ShVarStore::Varying);
         let locals = sh.flat_vars(ShVarStore::Local);
         let uniforms_cx = sh.flat_vars(ShVarStore::UniformCx);
         let uniforms_dl = sh.flat_vars(ShVarStore::UniformDl);
         let uniforms_dr = sh.flat_vars(ShVarStore::Uniform);
+
+        let mut vtx_cx = SlCx{
+            depth:0,
+            target:SlTarget::Vertex,
+            defargs_fn:"".to_string(),
+            defargs_call:"".to_string(),
+            call_prefix:"".to_string(),
+            shader:sh,
+            scope:Vec::new(),
+            fn_deps:vec!["vertex".to_string()],
+            fn_done:Vec::new(),
+            auto_vary:Vec::new()
+        };
+        let vtx_fns = assemble_fn_and_deps(sh, &mut vtx_cx)?;
+
+        let mut pix_cx = SlCx{
+            depth:0,
+            target:SlTarget::Pixel,
+            defargs_fn:"".to_string(),
+            defargs_call:"".to_string(),
+            call_prefix:"".to_string(),
+            shader:sh,
+            scope:Vec::new(),
+            fn_deps:vec!["pixel".to_string()],
+            fn_done:Vec::new(),
+            auto_vary:Vec::new()
+        };        
+        let pix_fns = assemble_fn_and_deps(sh, &mut pix_cx)?;
+        
+        for auto in &pix_cx.auto_vary{
+            varyings.push(auto.clone());
+            println!("AUTO VARYING {}",auto.name);
+        }
 
         // lets count the slots
         let geometry_slots = sh.compute_slot_total(&geometries);
@@ -573,6 +580,7 @@ impl CxShaders{
             slot_id += sh.get_type_slots(&instance.ty);
         }
 
+
         vtx_main.push_str("\n    gl_Position = vertex();\n");
         vtx_main.push_str("\n    // Varying packing\n");
 
@@ -598,13 +606,10 @@ impl CxShaders{
         vtx_main.push_str("\n}\n\0");
         pix_main.push_str("\n}\n\0");
 
-        pix_out.push_str("//Function defs\n");
-        let pix_fns = Self::assemble_fn_and_deps(sh, "pixel")?;
-        pix_out.push_str(&pix_fns);
-
-        vtx_out.push_str("//Function defs\n");
-        let vtx_fns = Self::assemble_fn_and_deps(sh, "vertex")?;
+        vtx_out.push_str("//Vertex shader\n");
         vtx_out.push_str(&vtx_fns);
+        pix_out.push_str("//Pixel shader\n");
+        pix_out.push_str(&pix_fns);
 
         vtx_out.push_str("//Main function\n");
         vtx_out.push_str(&vtx_main);

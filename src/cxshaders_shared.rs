@@ -1,12 +1,15 @@
 // Shared shader-compiler code for generating GLSL and Metal shading language
 
 use crate::shader::*;
+//use crate::cxshaders::*;
 
+#[derive(Clone)]
 pub struct Sl{
     pub sl:String,
     pub ty:String
 }
 
+#[derive(Clone)]
 pub struct SlErr{
     pub msg:String
 }
@@ -16,21 +19,33 @@ pub struct SlDecl{
     pub ty:String
 }
 
+#[derive(Clone)]
+pub enum SlTarget{
+    Pixel,
+    Vertex
+}
+
 pub struct SlCx<'a>{
     pub depth:usize,
+    pub target:SlTarget,
+    pub defargs_fn:String,
+    pub defargs_call:String,
+    pub call_prefix:String,
     pub shader:&'a Shader,
     pub scope:Vec<SlDecl>,
-    pub fndeps:Vec<String>
+    pub fn_deps:Vec<String>,
+    pub fn_done:Vec<Sl>,
+    pub auto_vary:Vec<ShVar>
 }
 
 impl<'a> SlCx<'a>{
-    fn scan_scope(&self, name:&str)->Option<&str>{
+    pub fn scan_scope(&self, name:&str)->Option<&str>{
         if let Some(decl) = self.scope.iter().find(|i| i.name == name){
             return Some(&decl.ty);
         }
         None
     }
-    fn get_type(&self, name:&str)->Result<&ShType, SlErr>{
+    pub fn get_type(&self, name:&str)->Result<&ShType, SlErr>{
         if let Some(ty) = self.shader.find_type(name){
             return Ok(ty);
         }
@@ -62,6 +77,7 @@ impl ShExpr{
     }
 }
 
+
 impl ShId{
     pub fn sl(&self, cx:&mut SlCx)->Result<Sl,SlErr>{
         // ok so. we have to find our id on
@@ -72,7 +88,7 @@ impl ShId{
             Ok(Sl{sl:self.name.to_string(), ty:cnst.ty.to_string()})
         } 
         else if let Some(var) = cx.shader.find_var(&self.name){
-            Ok(Sl{sl:self.name.to_string(), ty:var.ty.to_string()})
+            Ok(Sl{sl:cx.map_var(var), ty:var.ty.to_string()})
         } 
         else{ // id not found.. lets give an error
             Err(SlErr{
@@ -274,10 +290,13 @@ impl ShCall{
         // we have a call, look up the call type on cx
         let mut out = String::new();
         if let Some(shfn) = cx.shader.find_fn(&self.call){
+            let mut defargs_call = "".to_string();
             if let Some(_block) = &shfn.block{ // not internal, so its a dep
-                if cx.fndeps.iter().find(|i| **i == self.call).is_none(){
-                    cx.fndeps.push(self.call.clone());
+                if cx.fn_deps.iter().find(|i| **i == self.call).is_none(){
+                    cx.fn_deps.push(self.call.clone());
                 }
+                defargs_call = cx.defargs_call.to_string();
+                out.push_str(&cx.call_prefix);
             };
             out.push_str(&self.call);
             out.push_str("(");
@@ -348,6 +367,12 @@ impl ShCall{
             else{
                 shfn.ret.clone()
             };
+            if defargs_call.len() != 0{
+                if self.args.len() != 0{
+                    out.push_str(", ");
+                }
+                out.push_str(&defargs_call);
+            }
             out.push_str(")");
             // check our arg types
             // if our return type is T,
@@ -361,7 +386,7 @@ impl ShCall{
         else{
             // its a constructor call
             if let Some(glty) = cx.shader.find_type(&self.call){
-                out.push_str(&self.call);
+                out.push_str(&cx.map_type(&self.call));
                 out.push_str("(");
                 // TODO check args
                 for (i, arg) in self.args.iter().enumerate(){
@@ -511,7 +536,7 @@ impl ShLet{
             })
         }
 
-        out.push_str(&ty);
+        out.push_str(&cx.map_type(&ty));
         out.push_str(" ");
         out.push_str(&self.name);
         out.push_str(" = ");
@@ -533,22 +558,29 @@ impl ShLet{
 impl ShFn{
     pub fn sl(&self, cx:&mut SlCx)->Result<Sl,SlErr>{
         let mut out = "".to_string();
-        out.push_str(&self.ret);
+        out.push_str(&cx.map_type(&self.ret));
         out.push_str(" ");
+        out.push_str(&cx.call_prefix);
         out.push_str(&self.name);
         out.push_str("(");
         for (i, arg) in self.args.iter().enumerate(){
             if i != 0{
                 out.push_str(", ");
             }
-            out.push_str(&arg.ty);
+            out.push_str(&cx.map_type(&arg.ty));
             out.push_str(" ");
             out.push_str(&arg.name);
             cx.scope.push(SlDecl{
                 name:arg.name.clone(),
-                ty:arg.ty.clone()
+                ty:cx.map_type(&arg.ty)
             });
         };
+        if cx.defargs_fn.len() != 0{
+            if self.args.len() != 0{
+                out.push_str(", ");
+            }
+            out.push_str(&cx.defargs_fn);
+        }
         out.push_str(")");
         if let Some(block) = &self.block{
             let block = block.sl(cx)?;
@@ -561,23 +593,14 @@ impl ShFn{
     }
 }
 
-pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, SlErr>{
+pub fn assemble_fn_and_deps(sh:&Shader, cx:&mut SlCx)->Result<String, SlErr>{
 
-    let mut cx = SlCx{
-        depth:0,
-        shader:sh,
-        scope:Vec::new(),
-        fndeps:Vec::new()
-    };
-    cx.fndeps.push(entry_name.to_string());
-
-    let mut fn_done = Vec::<Sl>::new();
-
+    let mut fn_local = Vec::new();
     loop{
 
         // find what deps we haven't done yet
-        let fn_not_done = cx.fndeps.iter().find(|cxfn|{
-            if let Some(_done) = fn_done.iter().find(|i| i.ty == **cxfn){
+        let fn_not_done = cx.fn_deps.iter().find(|cxfn|{
+            if let Some(_done) = cx.fn_done.iter().find(|i| i.ty == **cxfn){
                 false
             }
             else{
@@ -589,8 +612,9 @@ pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, SlErr>{
             let fn_to_do = sh.find_fn(fn_not_done);
             if let Some(fn_to_do) = fn_to_do{
                 cx.scope.clear();
-                let result = fn_to_do.sl(&mut cx)?;
-                fn_done.push(result);
+                let result = fn_to_do.sl(cx)?;
+                cx.fn_done.push(result.clone());
+                fn_local.push(result);
             }
             else{
                 return Err(SlErr{msg:format!("Cannot find entry function {}", fn_not_done)})
@@ -602,7 +626,7 @@ pub fn assemble_fn_and_deps(sh:&Shader, entry_name:&str)->Result<String, SlErr>{
     }
     // ok lets reverse concatinate it
     let mut out = String::new();
-    for fnd in fn_done.iter().rev(){
+    for fnd in fn_local.iter().rev(){
         out.push_str(&fnd.sl);
         out.push_str("\n");
     }
