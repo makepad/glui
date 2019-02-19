@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::shader::*;
 use crate::cxtextures::*;
 use crate::cxdrawing::*;
@@ -45,34 +43,11 @@ impl<'a> SlCx<'a>{
 }
 
 #[derive(Default,Clone)]
-pub struct GLAttribute{
-    pub loc:gl::types::GLuint,
-    pub size:gl::types::GLsizei,
-    pub offset:gl::types::GLsizei,
-    pub stride:gl::types::GLsizei
-}
-
-#[derive(Default,Clone)]
-pub struct GLUniform{
-    pub loc:gl::types::GLint,
-    pub name:String,
-    pub size:usize
-}
-
-#[derive(Default,Clone)]
-pub struct GLSampler{
-    pub loc:gl::types::GLint,
-    pub name:String
-    //pub sampler:Sampler
-}
-
-#[derive(Default,Clone)]
 pub struct AssembledMtlShader{
  //   pub geometry_slots:usize,
- //   pub instance_slots:usize,
+    pub instance_slots:usize,
  //   pub geometry_attribs:usize,
  //   pub instance_attribs:usize,
-
     pub uniforms_dr: Vec<ShVar>,
     pub uniforms_dl: Vec<ShVar>,
     pub uniforms_cx: Vec<ShVar>,
@@ -82,18 +57,21 @@ pub struct AssembledMtlShader{
 }
 
 #[derive(Default,Clone)]
+pub struct DrawBuffers{
+    pub uni_cx:Option<Buffer>,
+    pub uni_dl:Option<Buffer>,
+    pub uni_dr:Option<Buffer>,
+    pub inst_vbuf:Option<Buffer>,
+    pub geom_vbuf:Option<Buffer>,
+    pub geom_ibuf:Option<Buffer>
+}
+
+#[derive(Default,Clone)]
 pub struct CompiledShader{
+    pub library:Option<metal::Library>,
+    pub pipeline_state:Option<metal::RenderPipelineState>,
     pub shader_id: usize,
-    pub program: gl::types::GLuint,
-    pub geom_attribs: Vec<GLAttribute>,
-    pub inst_attribs: Vec<GLAttribute>,
-    pub geom_vb: gl::types::GLuint,
-    pub geom_ib: gl::types::GLuint,
-    pub assembled_shader: AssembledMtlShader,
-    pub uniforms_dr: Vec<GLUniform>,
-    pub uniforms_dl: Vec<GLUniform>,
-    pub uniforms_cx: Vec<GLUniform>,
-    pub samplers: Vec<GLSampler>
+    pub assembled_shader: AssembledMtlShader
 }
 
 #[derive(Default,Clone)]
@@ -103,14 +81,14 @@ pub struct GLTexture2D{
 
 #[derive(Clone, Default)]
 pub struct CxShaders{
-    pub mtlshaders: Vec<CompiledShader>,
+    pub compiled_shaders: Vec<CompiledShader>,
     pub shaders: Vec<Shader>,
 }
 
 impl CxShaders{
 
     pub fn get(&self, id:usize)->&CompiledShader{
-        &self.mtlshaders[id]
+        &self.compiled_shaders[id]
     }
 
     pub fn add(&mut self, sh:Shader)->usize{
@@ -123,15 +101,15 @@ impl CxShaders{
     pub fn compile_all_shaders(&mut self, device:&Device){
         for sh in &self.shaders{
             let mtlsh = Self::compile_shader(&sh, device);
-            if let Ok(glsh) = mtlsh{
-                self.mtlshaders.push(CompiledShader{
-                    shader_id:self.mtlshaders.len(),
-                    ..glsh
+            if let Ok(mtlsh) = mtlsh{
+                self.compiled_shaders.push(CompiledShader{
+                    shader_id:self.compiled_shaders.len(),
+                    ..mtlsh
                 });
             }
             else if let Err(err) = mtlsh{
                 println!("GOT ERROR: {}", err.msg);
-                self.mtlshaders.push(
+                self.compiled_shaders.push(
                     CompiledShader{..Default::default()}
                 )
             }
@@ -203,9 +181,9 @@ impl CxShaders{
         let uniforms_dr = sh.flat_vars(ShVarStore::Uniform);
 
         // lets count the slots
-        let geometry_slots = sh.compute_slot_total(&geometries);
+        //let geometry_slots = sh.compute_slot_total(&geometries);
         let instance_slots = sh.compute_slot_total(&instances);
-        let varying_slots = sh.compute_slot_total(&varyings);
+        //let varying_slots = sh.compute_slot_total(&varyings);
 
         mtl_out.push_str(&Self::assemble_struct("_Geom", &geometries, true, ""));
         mtl_out.push_str(&Self::assemble_struct("_Inst", &instances, true, ""));
@@ -255,16 +233,16 @@ impl CxShaders{
         mtl_out.push_str(&pix_fns);
 
         // lets define the vertex shader
-        mtl_out.push_str("vertex _Vary vertex_shader(device _Geom *in_geometries [[buffer(0)]], device _Inst *in_instances [[buffer(1)]], ");
-        mtl_out.push_str("       device _UniCx &_uni_cx [[buffer(2)]], device _UniDl &_uni_dl [[buffer(3)]], device _UniDr &_uni_dr [[buffer(4)]], ");
-        mtl_out.push_str("       uint vtx_id [[vertex_id]], uint inst_id [[instance_id]]){\n");
-        mtl_out.push_str("       _Loc _loc;\n");
-        mtl_out.push_str("       _Vary _vary;\n");
-        mtl_out.push_str("       _Geom _geom = in_geometries[vtx_id];\n");
-        mtl_out.push_str("       _Inst _inst = in_instances[inst_id];\n");
-        mtl_out.push_str("       _vary.mtl_position = _vertex(");
+        mtl_out.push_str("vertex _Vary _vertex_shader(device _Geom *in_geometries [[buffer(0)]], device _Inst *in_instances [[buffer(1)]],\n");
+        mtl_out.push_str("  device _UniCx &_uni_cx [[buffer(2)]], device _UniDl &_uni_dl [[buffer(3)]], device _UniDr &_uni_dr [[buffer(4)]],\n");
+        mtl_out.push_str("  uint vtx_id [[vertex_id]], uint inst_id [[instance_id]]){\n");
+        mtl_out.push_str("  _Loc _loc;\n");
+        mtl_out.push_str("  _Vary _vary;\n");
+        mtl_out.push_str("  _Geom _geom = in_geometries[vtx_id];\n");
+        mtl_out.push_str("  _Inst _inst = in_instances[inst_id];\n");
+        mtl_out.push_str("  _vary.mtl_position = _vertex(");
         mtl_out.push_str(&vtx_cx.defargs_call);
-        mtl_out.push_str(");\n");
+        mtl_out.push_str(");\n\n");
 
         for auto in pix_cx.auto_vary{
             if let ShVarStore::Geometry = auto.store{
@@ -283,9 +261,15 @@ impl CxShaders{
             }
         }
 
-        mtl_out.push_str("       return _vary;");
+        mtl_out.push_str("       return _vary;\n");
         mtl_out.push_str("};\n");
         // then the fragment shader
+        mtl_out.push_str("fragment float4 _fragment_shader(_Vary _vary[[stage_in]],\n");
+        mtl_out.push_str("  device _UniCx &_uni_cx [[buffer(0)]], device _UniDl &_uni_dl [[buffer(1)]], device _UniDr &_uni_dr [[buffer(2)]]){\n");
+        mtl_out.push_str("  _Loc _loc;\n");
+        mtl_out.push_str("  return _pixel(");
+        mtl_out.push_str(&pix_cx.defargs_call);
+        mtl_out.push_str(");\n};\n");
 
 
 
@@ -298,7 +282,7 @@ impl CxShaders{
         // lets composite our ShAst structure into a set of methods
         Ok(AssembledMtlShader{
 //            geometry_slots:geometry_slots,
-//            instance_slots:instance_slots,
+            instance_slots:instance_slots,
 //            geometry_attribs:Self::ceil_div4(geometry_slots),
  //           instance_attribs:Self::ceil_div4(instance_slots),
             uniforms_dr:uniforms_dr,
@@ -316,18 +300,37 @@ impl CxShaders{
         //let library = device.new_library_with_source(&ash.mtlsl, &options);
         let library = device.new_library_with_source(&ash.mtlsl, &options);
 
-        if let Err(err) = library{
-            println!("{}", err);
+        match library{
+            Err(library)=>Err(SlErr{msg:library}),
+            Ok(library)=>Ok(CompiledShader{
+                shader_id:0,
+                pipeline_state:{
+                    let vert = library.get_function("_vertex_shader", None).unwrap();
+                    let frag = library.get_function("_fragment_shader", None).unwrap();
+                    let rpd = RenderPipelineDescriptor::new();
+                    rpd.set_vertex_function(Some(&vert));
+                    rpd.set_fragment_function(Some(&frag));
+                    let color = rpd.color_attachments().object_at(0).unwrap();
+                    color.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+                    color.set_blending_enabled(true);
+                    color.set_source_rgb_blend_factor(MTLBlendFactor::One);
+                    color.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+                    color.set_source_alpha_blend_factor(MTLBlendFactor::One);
+                    color.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+                    color.set_rgb_blend_operation(MTLBlendOperation::Add);
+                    color.set_alpha_blend_operation(MTLBlendOperation::Add);
+                    Some(device.new_render_pipeline_state(&rpd).unwrap())
+                },
+                library:Some(library),
+                assembled_shader:ash,
+            })
         }
-
-        Err(SlErr{msg:"NI".to_string()})
     }
 
-    pub fn create_vao(shgl:&CompiledShader)->GLInstanceVAO{
+    pub fn create_vao(_shgl:&CompiledShader)->GLInstanceVAO{
+       
         // create the VAO
-        let mut vao;
-        let mut vb;
-        unsafe{
+         /*unsafe{
             vao = mem::uninitialized();
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
@@ -353,59 +356,13 @@ impl CxShaders{
             // bind the indexbuffer
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, shgl.geom_ib);
             gl::BindVertexArray(0);
-        }
+        }*/
         GLInstanceVAO{
-            vao:vao,
-            vb:vb
+            vao:0,
+            vb:0
         }
     }
 
     pub fn destroy_vao(glivao:&mut GLInstanceVAO){
-        unsafe{
-            gl::DeleteVertexArrays(1, &mut glivao.vao);
-            gl::DeleteBuffers(1, &mut glivao.vb);
-        }
-    }
-
-    pub fn set_uniform_buffer_fallback(locs:&Vec<GLUniform>, uni:&Vec<f32>){
-        let mut o = 0;
-        for loc in locs{
-            if loc.loc >=0 {
-                unsafe{
-                    match loc.size{
-                        1=>gl::Uniform1f(loc.loc, uni[o]),
-                        2=>gl::Uniform2f(loc.loc, uni[o], uni[o+1]),
-                        3=>gl::Uniform3f(loc.loc, uni[o], uni[o+1], uni[o+2]),
-                        4=>gl::Uniform4f(loc.loc, uni[o], uni[o+1], uni[o+2], uni[o+3]),
-                        16=>gl::UniformMatrix4fv(loc.loc, 1, 0, uni.as_ptr().offset((o*4) as isize)),
-                        _=>()
-                    }
-                }
-            };
-            o = o + loc.size;
-        }
-    }
-
-    pub fn set_samplers(locs:&Vec<GLSampler>, texture_ids:&Vec<usize>, cxtex:&CxTextures){
-        let mut o = 0;
-        for loc in locs{
-            let id = texture_ids[o];
-            unsafe{
-                gl::ActiveTexture(gl::TEXTURE0 + o as u32);
-            }        
-            
-            if loc.loc >=0{
-                unsafe{
-                    let tex = &cxtex.textures[id];
-                    gl::BindTexture(gl::TEXTURE_2D, tex.gl_texture);
-                }
-            }
-            else{
-                unsafe{
-                    gl::BindTexture(gl::TEXTURE_2D, 0);
-                }
-            }
-            o = o +1;
-        }
     }
 }

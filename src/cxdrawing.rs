@@ -52,7 +52,8 @@ impl CxDrawing{
                 samplers:Vec::new(),
                 first:true,
                 update_frame_id:self.frame_id,
-                vao:CxShaders::create_vao(sh)
+                vao:CxShaders::create_vao(sh),
+                buffers:DrawBuffers{..Default::default()}
             });
             return &mut draw_list.draws[id];
         }
@@ -95,6 +96,7 @@ pub struct Draw{
     pub samplers:Vec<usize>,
     pub update_frame_id: usize,
     pub vao:GLInstanceVAO,
+    pub buffers:DrawBuffers,
     pub first:bool
 }
 

@@ -84,7 +84,7 @@ impl Cx{
                 }
 
                 let sh = &self.shaders.shaders[draw.shader_id];
-                let shgl = &self.shaders.glshaders[draw.shader_id];
+                let shgl = &self.shaders.compiled_shaders[draw.shader_id];
 
                 unsafe{
                     gl::UseProgram(shgl.program);

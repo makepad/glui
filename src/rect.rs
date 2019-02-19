@@ -64,7 +64,7 @@ impl Rect{
             }
 
             fn pixel()->vec4{
-                return my_fn(color*fac);
+                return vec4(color.rgb*fac, fac);
             }
 
         }));
@@ -76,7 +76,7 @@ impl Rect{
         let dr = cx.drawing.instance(cx.shaders.get(self.shader_id));
 
         if dr.first{
-            dr.ufloat("fac", 0.1);
+            dr.ufloat("fac", 1.0);
         }
 
         dr.float("x", x);

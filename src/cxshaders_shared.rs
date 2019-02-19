@@ -136,9 +136,63 @@ impl ShField{
             })
         }
         else{
-            Err(SlErr{
-                msg:format!("member {} not cannot be found on type {}", self.member, base.ty)
-            })
+            let mut mode = 0;
+            let slots = shty.slots;
+            if shty.name != "float" && shty.name != "vec2" && shty.name != "vec3" && shty.name != "vec4"{
+                return  Err(SlErr{
+                    msg:format!("member {} not found {}", self.member, base.ty)
+                })
+            }
+            if shty.name.len() >4 {
+                return  Err(SlErr{
+                    msg:format!("member {} not found or a valid swizzle of {}", self.member, base.ty)
+                })
+            }
+            for chr in shty.name.chars(){
+                if chr == 'x' || chr == 'y' || chr == 'z' || chr == 'w'{
+                    if chr == 'y' && slots<2{ mode = 3;}
+                    else if chr == 'z' && slots<3{ mode = 3;}
+                    else if chr == 'w' && slots<4{ mode = 3;};
+                    if mode == 0{ mode = 1;}
+                    else if mode != 1{
+                        return  Err(SlErr{
+                            msg:format!("member {} not a valid swizzle of {}", self.member, base.ty)
+                        })
+                    }
+                }
+                else if chr == 'r' || chr == 'g' || chr == 'b' || chr == 'a'{
+                    if chr == 'r' && slots<2{ mode = 3;}
+                    else if chr == 'g' && slots<3{ mode = 3;}
+                    else if chr == 'b' && slots<4{ mode = 3;};                    
+                    if mode == 0{ mode = 2;}
+                    else if mode != 2{
+                        return  Err(SlErr{
+                            msg:format!("member {} not a valid swizzle of {}", self.member, base.ty)
+                        })
+                    }
+                }
+            }
+            match shty.name.len(){
+                1=>return Ok(Sl{
+                    sl:format!("{}.{}", base.sl, self.member),
+                    ty:"float".to_string()
+                }),
+                2=>return Ok(Sl{
+                    sl:format!("{}.{}", base.sl, self.member),
+                    ty:"vec2".to_string()
+                }),
+                3=>return Ok(Sl{
+                    sl:format!("{}.{}", base.sl, self.member),
+                    ty:"vec3".to_string()
+                }),
+                4=>return Ok(Sl{
+                    sl:format!("{}.{}", base.sl, self.member),
+                    ty:"vec4".to_string()
+                }),
+                _=>Err(SlErr{
+                    msg:format!("member {} not cannot be found on type {}", self.member, base.ty)
+                })
+            }
         }
     }
 }

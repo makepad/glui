@@ -84,20 +84,24 @@ pub struct CompiledShader{
 }
 
 #[derive(Default,Clone)]
+pub struct DrawBuffers{
+}
+
+#[derive(Default,Clone)]
 pub struct GLTexture2D{
     pub texture_id: usize
 }
 
 #[derive(Clone, Default)]
 pub struct CxShaders{
-    pub glshaders: Vec<CompiledShader>,
+    pub compiled_shaders: Vec<CompiledShader>,
     pub shaders: Vec<Shader>,
 }
 
 impl CxShaders{
 
     pub fn get(&self, id:usize)->&CompiledShader{
-        &self.glshaders[id]
+        &self.compiled_shaders[id]
     }
 
     pub fn add(&mut self, sh:Shader)->usize{
@@ -111,14 +115,14 @@ impl CxShaders{
         for sh in &self.shaders{
             let glsh = Self::compile_shader(&sh);
             if let Ok(glsh) = glsh{
-                self.glshaders.push(CompiledShader{
-                    shader_id:self.glshaders.len(),
+                self.compiled_shaders.push(CompiledShader{
+                    shader_id:self.compiled_shaders.len(),
                     ..glsh
                 });
             }
             else if let Err(err) = glsh{
                 println!("GOT ERROR: {}", err.msg);
-                self.glshaders.push(
+                self.compiled_shaders.push(
                     CompiledShader{..Default::default()}
                 )
             }
