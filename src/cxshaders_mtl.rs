@@ -3,6 +3,7 @@ use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
 
+use cocoa::foundation::{NSRange, NSAutoreleasePool};
 use metal::*;
 
 impl<'a> SlCx<'a>{
@@ -57,13 +58,72 @@ pub struct AssembledMtlShader{
 }
 
 #[derive(Default,Clone)]
+pub struct MetalBuffer{
+    pub buffer:Option<metal::Buffer>,
+    pub size:usize
+}
+
+impl MetalBuffer{
+    pub fn update_with_f32_data(&mut self, device:&Device, data:&Vec<f32>){
+        if self.size != data.len(){
+            self.buffer = None;
+        }
+        if let None = &self.buffer{
+            self.buffer = Some(
+                device.new_buffer(
+                    (data.len() * std::mem::size_of::<f32>()) as u64,
+                    MTLResourceOptions::CPUCacheModeDefaultCache
+                )
+            );
+            self.size = data.len()
+        }
+        if let Some(buffer) = &self.buffer{
+            let p = buffer.contents(); 
+            unsafe {
+                std::ptr::copy(data.as_ptr(), p as *mut f32, data.len());
+            }
+            buffer.did_modify_range(NSRange::new(0 as u64, (data.len() * std::mem::size_of::<f32>()) as u64));
+        }
+    }
+
+    pub fn update_with_u32_data(&mut self, device:&Device, data:&Vec<u32>){
+        if self.size != data.len(){
+            self.buffer = None;
+        }
+        if let None = &self.buffer{
+            self.buffer = Some(
+                device.new_buffer(
+                    (data.len() * std::mem::size_of::<u32>()) as u64,
+                    MTLResourceOptions::CPUCacheModeDefaultCache
+                )
+            );
+            self.size = data.len()
+        }
+        if let Some(buffer) = &self.buffer{
+            let p = buffer.contents(); 
+            unsafe {
+                std::ptr::copy(data.as_ptr(), p as *mut u32, data.len());
+            }
+            buffer.did_modify_range(NSRange::new(0 as u64, (data.len() * std::mem::size_of::<u32>()) as u64));
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct CxBuffers{
+     pub uni_cx:MetalBuffer
+}
+
+#[derive(Clone, Default)]
+pub struct DrawListBuffers{
+     pub uni_dl:MetalBuffer
+}
+
+
+#[derive(Default,Clone)]
 pub struct DrawBuffers{
-    pub uni_cx:Option<Buffer>,
-    pub uni_dl:Option<Buffer>,
-    pub uni_dr:Option<Buffer>,
-    pub inst_vbuf:Option<Buffer>,
-    pub geom_vbuf:Option<Buffer>,
-    pub geom_ibuf:Option<Buffer>
+    pub uni_dr:MetalBuffer,
+    pub inst_vbuf:MetalBuffer
 }
 
 #[derive(Default,Clone)]
@@ -71,7 +131,9 @@ pub struct CompiledShader{
     pub library:Option<metal::Library>,
     pub pipeline_state:Option<metal::RenderPipelineState>,
     pub shader_id: usize,
-    pub assembled_shader: AssembledMtlShader
+    pub assembled_shader: AssembledMtlShader,
+    pub geom_vbuf:MetalBuffer,
+    pub geom_ibuf:MetalBuffer
 }
 
 #[derive(Default,Clone)]
@@ -323,6 +385,16 @@ impl CxShaders{
                 },
                 library:Some(library),
                 assembled_shader:ash,
+                geom_ibuf:{
+                    let mut geom_ibuf = MetalBuffer{..Default::default()};
+                    geom_ibuf.update_with_u32_data(device, &sh.geometry_indices);
+                    geom_ibuf
+                },
+                geom_vbuf:{
+                    let mut geom_vbuf = MetalBuffer{..Default::default()};
+                    geom_vbuf.update_with_f32_data(device, &sh.geometry_vertices);
+                    geom_vbuf
+                }
             })
         }
     }

@@ -201,7 +201,8 @@ const DL_UNI_SIZE:usize = 1;
 pub struct DrawList{
     pub draws:Vec<Draw>,
     pub draws_len: usize,
-    pub uniforms:Vec<f32> // cmdlist uniforms
+    pub uniforms:Vec<f32>, // cmdlist uniforms
+    pub buffers:DrawListBuffers
 }
 
 impl DrawList{

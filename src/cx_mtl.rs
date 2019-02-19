@@ -17,18 +17,6 @@ use crate::cxfonts::*;
 use crate::cxtextures::*;
 use crate::cxturtle::*;
 
-fn prepare_render_pass_descriptor(descriptor: &RenderPassDescriptorRef, texture: &TextureRef) {
-    //descriptor.color_attachments().set_object_at(0, MTLRenderPassColorAttachmentDescriptor::alloc());
-    //let color_attachment: MTLRenderPassColorAttachmentDescriptor = unsafe { msg_send![descriptor.color_attachments().0, _descriptorAtIndex:0] };//descriptor.color_attachments().object_at(0);
-    let color_attachment = descriptor.color_attachments().object_at(0).unwrap();
-
-    color_attachment.set_texture(Some(texture));
-    color_attachment.set_load_action(MTLLoadAction::Clear);
-    color_attachment.set_clear_color(MTLClearColor::new(0.5, 0.2, 0.2, 1.0));
-    color_attachment.set_store_action(MTLStoreAction::Store);
-}
-
-
 #[derive(Clone)]
 pub struct Cx{
     pub title:String,
@@ -40,7 +28,8 @@ pub struct Cx{
     pub fonts:CxFonts,
     pub textures:CxTextures,
 
-    pub uniforms:Vec<f32>
+    pub uniforms:Vec<f32>,
+    pub buffers:CxBuffers
 }
 
 impl Default for Cx{
@@ -55,7 +44,8 @@ impl Default for Cx{
             textures:CxTextures{..Default::default()},
             title:"Hello World".to_string(),
             running:true,
-            uniforms:uniforms
+            uniforms:uniforms,
+            buffers:CxBuffers{..Default::default()}
         }
     }
 }
@@ -81,6 +71,11 @@ impl Cx{
 
     pub fn exec_draw_list(&mut self, id: usize, device:&Device, encoder:&RenderCommandEncoderRef){
         
+        // update draw list uniforms
+        {
+            let draw_list = &mut self.drawing.draw_lists[id];
+            draw_list.buffers.uni_dl.update_with_f32_data(device, &draw_list.uniforms);
+        }
         // tad ugly otherwise the borrow checker locks 'self' and we can't recur
         for ci in 0..self.drawing.draw_lists[id].draws_len{
             let sub_list_id = self.drawing.draw_lists[id].draws[ci].sub_list_id;
@@ -94,66 +89,44 @@ impl Cx{
                 let sh = &self.shaders.shaders[draw.shader_id];
                 let shc = &self.shaders.compiled_shaders[draw.shader_id];
                 
-
-                let uni_cx  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(self.uniforms.as_ptr()) },
-                        (self.uniforms.len() * mem::size_of::<f32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
-
-                let uni_dl  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(draw_list.uniforms.as_ptr()) },
-                        (draw_list.uniforms.len() * mem::size_of::<f32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
-
-                let uni_dr  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(draw.uniforms.as_ptr()) },
-                        (draw.uniforms.len() * mem::size_of::<f32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
-
-                let inst_vbuf  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(draw.instance.as_ptr()) },
-                        (draw.instance.len() * mem::size_of::<f32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
-
-                let geom_vbuf  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(sh.geometry_vertices.as_ptr()) },
-                        (sh.geometry_vertices.len() * mem::size_of::<f32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
-
-                let geom_ibuf  = device.new_buffer_with_data(
-                        unsafe { mem::transmute(sh.geometry_indices.as_ptr()) },
-                        (sh.geometry_indices.len() * mem::size_of::<u32>()) as u64,
-                        MTLResourceOptions::CPUCacheModeDefaultCache);
+                if draw.update_frame_id == self.drawing.frame_id{
+                    // update the instance buffer data
+                    draw.buffers.inst_vbuf.update_with_f32_data(device, &draw.instance);
+                    draw.buffers.uni_dr.update_with_f32_data(device, &draw.uniforms);
+                }
 
                 let instances = (draw.instance.len() / shc.assembled_shader.instance_slots) as u64;
                 if let Some(pipeline_state) = &shc.pipeline_state{
                     encoder.set_render_pipeline_state(pipeline_state);
-                    encoder.set_vertex_buffer(0, Some(&geom_vbuf), 0);
-                    encoder.set_vertex_buffer(1, Some(&inst_vbuf), 0);
-                    encoder.set_vertex_buffer(2, Some(&uni_cx), 0);
-                    encoder.set_vertex_buffer(3, Some(&uni_dl), 0);
-                    encoder.set_vertex_buffer(4, Some(&uni_dr), 0);
-                    encoder.set_fragment_buffer(0, Some(&uni_cx), 0);
-                    encoder.set_fragment_buffer(1, Some(&uni_dl), 0);
-                    encoder.set_fragment_buffer(2, Some(&uni_dr), 0);
-                    encoder.draw_indexed_primitives_instanced(
-                        MTLPrimitiveType::Triangle,
-                        3, // Index Count
-                        MTLIndexType::UInt32, // indexType,
-                        &geom_ibuf, // index buffer
-                        0, // index buffer offset
-                        instances, // instance count
-                    )
-                }
-                // hang on to the buffers
-                /*
-                draw.buffers.uni_cx = Some(uni_cx);
-                draw.buffers.uni_dl = Some(uni_dl);
-                draw.buffers.uni_dr = Some(uni_dr);
-                draw.buffers.inst_vbuf = Some(inst_vbuf);
-                draw.buffers.geom_vbuf = Some(geom_vbuf);
-                draw.buffers.geom_ibuf = Some(geom_ibuf);*/
+                    if let Some(buf) = &shc.geom_vbuf.buffer{encoder.set_vertex_buffer(0, Some(&buf), 0);}
+                    else{println!("Drawing error: geom_vbuf None")}
+                    if let Some(buf) = &draw.buffers.inst_vbuf.buffer{encoder.set_vertex_buffer(1, Some(&buf), 0);}
+                    else{println!("Drawing error: inst_vbuf None")}
+                    if let Some(buf) = &self.buffers.uni_cx.buffer{encoder.set_vertex_buffer(2, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_cx None")}
+                    if let Some(buf) = &draw_list.buffers.uni_dl.buffer{encoder.set_vertex_buffer(3, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_dl None")}
+                    if let Some(buf) = &draw.buffers.uni_dr.buffer{encoder.set_vertex_buffer(4, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_dr None")}
 
+                    if let Some(buf) = &self.buffers.uni_cx.buffer{encoder.set_fragment_buffer(0, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_cx None")}
+                    if let Some(buf) = &draw_list.buffers.uni_dl.buffer{encoder.set_fragment_buffer(1, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_dl None")}
+                    if let Some(buf) = &draw.buffers.uni_dr.buffer{encoder.set_fragment_buffer(2, Some(&buf), 0);}
+                    else{println!("Drawing error: uni_dr None")}
+                    if let Some(buf) = &shc.geom_ibuf.buffer{
+                        encoder.draw_indexed_primitives_instanced(
+                            MTLPrimitiveType::Triangle,
+                            3, // Index Count
+                            MTLIndexType::UInt32, // indexType,
+                            &buf, // index buffer
+                            0, // index buffer offset
+                            instances, // instance count
+                        )
+                   }
+                    else{println!("Drawing error: geom_ibuf None")}
+                }
             }
         }
     }
@@ -220,7 +193,12 @@ impl Cx{
 
             if let Some(drawable) = layer.next_drawable() {
                 let render_pass_descriptor = RenderPassDescriptor::new();
-                let _a = prepare_render_pass_descriptor(&render_pass_descriptor, drawable.texture());
+
+                let color_attachment = render_pass_descriptor.color_attachments().object_at(0).unwrap();
+                color_attachment.set_texture(Some(drawable.texture()));
+                color_attachment.set_load_action(MTLLoadAction::Clear);
+                color_attachment.set_clear_color(MTLClearColor::new(0.5, 0.2, 0.2, 1.0));
+                color_attachment.set_store_action(MTLStoreAction::Store);
 
                 let command_buffer = command_queue.new_command_buffer();
  
@@ -228,6 +206,8 @@ impl Cx{
 
                 let parallel_encoder = command_buffer.new_parallel_render_command_encoder(&render_pass_descriptor);
                 let encoder = parallel_encoder.render_command_encoder();
+
+                self.buffers.uni_cx.update_with_f32_data(&device, &self.uniforms);
 
                 // ok now we should call our render thing
                 self.exec_draw_list(0, &device, encoder);
