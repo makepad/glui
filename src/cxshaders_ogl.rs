@@ -535,7 +535,6 @@ impl CxShaders{
         
         for auto in &pix_cx.auto_vary{
             varyings.push(auto.clone());
-            println!("AUTO VARYING {}",auto.name);
         }
 
         // lets count the slots
