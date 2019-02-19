@@ -2,7 +2,7 @@ use std::mem;
 use std::ffi::CStr;
 
 use cocoa::base::id as cocoa_id;
-use cocoa::foundation::{NSRange, NSAutoreleasePool};
+use cocoa::foundation::{NSAutoreleasePool};
 use cocoa::appkit::{NSWindow, NSView};
 use core_graphics::geometry::CGSize;
 use objc::runtime::YES;
@@ -86,7 +86,7 @@ impl Cx{
                 let draw_list = &mut self.drawing.draw_lists[id];
                 let draw = &mut draw_list.draws[ci];
 
-                let sh = &self.shaders.shaders[draw.shader_id];
+                //let sh = &self.shaders.shaders[draw.shader_id];
                 let shc = &self.shaders.compiled_shaders[draw.shader_id];
                 
                 if draw.update_frame_id == self.drawing.frame_id{

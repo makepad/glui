@@ -1,16 +1,35 @@
 use std::mem;
 use std::ptr;
-use std::collections::HashMap;
 
 use crate::shader::*;
 use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
 
+
 impl<'a> SlCx<'a>{
-    pub fn map_type(&self, ty:&str)->String{
-        ty.to_string()
+    pub fn map_call(&self, name:&str, _args:&Vec<Sl>)->MapCallResult{
+        match name{
+            "matrix_comp_mult"=>return MapCallResult::Rename("matrixCompMult".to_string()),
+            "less_than"=>return MapCallResult::Rename("less_than".to_string()),
+            "less_than_equal"=>return MapCallResult::Rename("lessThanEqual".to_string()),
+            "greater_than"=>return MapCallResult::Rename("greaterThan".to_string()),
+            "greater_than_equal"=>return MapCallResult::Rename("greaterThanEqual".to_string()),
+            "not_equal"=>return MapCallResult::Rename("notEqual".to_string()),
+            "sample2d"=>{
+                return MapCallResult::Rename("texture2D".to_string())
+            },
+            _=>return MapCallResult::None
+        }
     }
+
+    pub fn map_type(&self, ty:&str)->String{
+        match ty{
+            "texture2d"=>return "sampler2D".to_string(),
+            _=>return ty.to_string()
+        }
+    }
+
     pub fn map_var(&mut self, var:&ShVar)->String{
         match var.store{
             ShVarStore::Instance=>{
@@ -46,10 +65,9 @@ pub struct GLUniform{
 }
 
 #[derive(Default,Clone)]
-pub struct GLSampler{
+pub struct GLTextureSlot{
     pub loc:gl::types::GLint,
     pub name:String
-    //pub sampler:Sampler
 }
 
 #[derive(Default,Clone)]
@@ -62,7 +80,7 @@ pub struct AssembledGLShader{
     pub uniforms_dr: Vec<ShVar>,
     pub uniforms_dl: Vec<ShVar>,
     pub uniforms_cx: Vec<ShVar>,
-    pub samplers_2d:Vec<ShVar>,
+    pub texture_slots:Vec<ShVar>,
 
     pub fragment:String,
     pub vertex:String
@@ -80,7 +98,7 @@ pub struct CompiledShader{
     pub uniforms_dr: Vec<GLUniform>,
     pub uniforms_dl: Vec<GLUniform>,
     pub uniforms_cx: Vec<GLUniform>,
-    pub samplers: Vec<GLSampler>
+    pub texture_slots: Vec<GLUniform>
 }
 
 #[derive(Default,Clone)]
@@ -224,21 +242,22 @@ impl CxShaders{
         gl_uni
     }
 
-    pub fn compile_get_samplers_2d(program:gl::types::GLuint, sams:&Vec<ShVar>)->Vec<GLSampler>{
-        let mut gl_samplers = Vec::new();
-        for sam in sams{
+    pub fn compile_get_texture_slots(program:gl::types::GLuint, texture_slots:&Vec<ShVar>)->Vec<GLUniform>{
+        let mut gl_texture_slots = Vec::new();
+        for slot in texture_slots{
             let mut name0 = "".to_string();
-            name0.push_str(&sam.name);
+            name0.push_str(&slot.name);
             name0.push_str("\0");
             unsafe{
-                gl_samplers.push(GLSampler{
+                gl_texture_slots.push(GLUniform{
                     loc:gl::GetUniformLocation(program, name0.as_ptr() as *const _),
-                    name:sam.name.clone()
+                    name:slot.name.clone(),
+                    size:0
                     //,sampler:sam.sampler.clone()
                 })
             }
         }
-        gl_samplers
+        gl_texture_slots
     }
 
     pub fn assemble_uniforms(unis:&Vec<ShVar>)->String{
@@ -261,10 +280,15 @@ impl CxShaders{
         r
     }
 
-    pub fn assemble_samplers_2d(unis:&Vec<ShVar>)->String{
+    pub fn assemble_texture_slots(unis:&Vec<ShVar>)->String{
         let mut out = String::new();
         for uni in unis{
-            out.push_str("uniform sampler2D ");
+            out.push_str("uniform ");
+            match uni.ty.as_ref(){
+                "texture2d"=>out.push_str("sampler2D"),
+                _=>out.push_str("unknown_texture_type")
+            };
+            out.push_str(" ");
             out.push_str(&uni.name);
             out.push_str(";\n")
         };
@@ -507,9 +531,9 @@ impl CxShaders{
         let mut vtx_out = "#version 100\nprecision highp float;\n".to_string();
         // #extension GL_OES_standard_derivatives : enable
         let mut pix_out = "#version 100\nprecision highp float;\n".to_string();
-
+        let compat_dfdxy = "vec2 dfdx(vec2 dummy){\nreturn vec2(0.05);\n}\nvec2 dfdy(vec2 dummy){\nreturn vec2(0.05);\n}\n";
         // ok now define samplers from our sh. 
-        let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
+        let texture_slots = sh.flat_vars(ShVarStore::Texture);
         let geometries = sh.flat_vars(ShVarStore::Geometry);
         let instances = sh.flat_vars(ShVarStore::Instance);
         let mut varyings = sh.flat_vars(ShVarStore::Varying);
@@ -561,14 +585,17 @@ impl CxShaders{
         shared.push_str(&Self::assemble_uniforms(&uniforms_dl));
         shared.push_str("//Draw uniforms\n");
         shared.push_str(&Self::assemble_uniforms(&uniforms_dr));
-        shared.push_str("//Samplers2D\n");
-        shared.push_str(&Self::assemble_samplers_2d(&samplers_2d));
+        shared.push_str("//Texture slots\n");
+        shared.push_str(&Self::assemble_texture_slots(&texture_slots));
         shared.push_str("// Varyings\n");
         shared.push_str(&Self::assemble_varblock("varying", "varying", varying_slots));
 
         for local in &locals{shared.push_str(&Self::assemble_vardef(&local));}
 
         pix_out.push_str(&shared);
+
+        pix_out.push_str(compat_dfdxy);
+
         vtx_out.push_str(&shared);
 
         let mut vtx_main = "void main(){\n".to_string();
@@ -643,7 +670,7 @@ impl CxShaders{
             uniforms_dr:uniforms_dr,
             uniforms_dl:uniforms_dl,
             uniforms_cx:uniforms_cx,
-            samplers_2d:samplers_2d,
+            texture_slots:texture_slots,
             fragment:pix_out,
             vertex:vtx_out
         })
@@ -713,7 +740,7 @@ impl CxShaders{
                 uniforms_cx:Self::compile_get_uniforms(program, sh, &ash.uniforms_cx),
                 uniforms_dl:Self::compile_get_uniforms(program, sh, &ash.uniforms_dl),
                 uniforms_dr:Self::compile_get_uniforms(program, sh, &ash.uniforms_dr),
-                samplers:Self::compile_get_samplers_2d(program, &ash.samplers_2d),
+                texture_slots:Self::compile_get_texture_slots(program, &ash.texture_slots),
                 assembled_shader:ash,
                 ..Default::default()
             })
@@ -783,7 +810,7 @@ impl CxShaders{
         }
     }
 
-    pub fn set_samplers(locs:&Vec<GLSampler>, texture_ids:&Vec<usize>, cxtex:&CxTextures){
+    pub fn set_texture_slots(locs:&Vec<GLUniform>, texture_ids:&Vec<usize>, cxtex:&CxTextures){
         let mut o = 0;
         for loc in locs{
             let id = texture_ids[o];

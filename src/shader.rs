@@ -42,7 +42,7 @@ pub enum ShVarStore{
     UniformCx,
     Instance,
     Geometry,
-    Sampler2D,
+    Texture,
     Local,
     Varying,
 }
@@ -489,30 +489,31 @@ impl Shader{
                     ShFn{name:"reflect".to_string(), args:vec![ShFnArg::new("i","T"),ShFnArg::new("n","T")], ret:"T".to_string(), block:None},
                     ShFn{name:"refract".to_string(), args:vec![ShFnArg::new("i","T"),ShFnArg::new("n","T"),ShFnArg::new("eta","T")], ret:"T".to_string(), block:None},
 
-                    ShFn{name:"matrixCompMult".to_string(), args:vec![ShFnArg::new("a","mat4"),ShFnArg::new("b","mat4")], ret:"mat4".to_string(), block:None},
+                    ShFn{name:"matrix_comp_mult".to_string(), args:vec![ShFnArg::new("a","mat4"),ShFnArg::new("b","mat4")], ret:"mat4".to_string(), block:None},
 
-                    ShFn{name:"lessThan".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
-                    ShFn{name:"lessThanEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
-                    ShFn{name:"greaterThan".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
-                    ShFn{name:"greaterThanEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"less_than".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"less_than_equal".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"greater_than".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"greater_than_equal".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
                     ShFn{name:"equal".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
-                    ShFn{name:"notEqual".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
+                    ShFn{name:"not_equal".to_string(), args:vec![ShFnArg::new("x","T"),ShFnArg::new("y","T")], ret:"B".to_string(), block:None},
 
                     ShFn{name:"any".to_string(), args:vec![ShFnArg::new("x","B")], ret:"bool".to_string(), block:None},
                     ShFn{name:"all".to_string(), args:vec![ShFnArg::new("x","B")], ret:"bool".to_string(), block:None},
                     ShFn{name:"not".to_string(), args:vec![ShFnArg::new("x","B")], ret:"B".to_string(), block:None},
 
-                    ShFn{name:"dFdx".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
-                    ShFn{name:"dFdy".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"dfdx".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
+                    ShFn{name:"dfdy".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
                     ShFn{name:"fwidth".to_string(), args:vec![ShFnArg::new("x","T")], ret:"T".to_string(), block:None},
 
+                    ShFn{name:"sample2d".to_string(), args:vec![ShFnArg::new("texture","texture2d"), ShFnArg::new("coord","vec2")], ret:"vec4".to_string(), block:None},
+                    /*
                     ShFn{name:"texture2DLod".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
                     ShFn{name:"texture2DProjLod".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
                     ShFn{name:"textureCubeLod".to_string(), args:vec![ShFnArg::new("sampler","samplerCube"), ShFnArg::new("coord","vec3"), ShFnArg::new("lod","float")], ret:"vec4".to_string(), block:None},
-
-                    ShFn{name:"texture2D".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
                     ShFn{name:"texture2DProj".to_string(), args:vec![ShFnArg::new("sampler","sampler2D"), ShFnArg::new("coord","vec2"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
                     ShFn{name:"textureCube".to_string(), args:vec![ShFnArg::new("sampler","samplerCube"), ShFnArg::new("coord","vec3"), ShFnArg::new("bias","O")], ret:"vec4".to_string(), block:None},
+                    */
                 ],
                 consts:Vec::new()
             }
@@ -520,30 +521,29 @@ impl Shader{
     }
 
     pub fn def_df(&mut self){
-        /*
-        self.define("PI","3.141592653589793");
-		self.define("E","2.718281828459045");
-		self.define("LN2","0.6931471805599453");
-		self.define("LN10","2.302585092994046");
-		self.define("LOG2E","1.4426950408889634");
-		self.define("LOG10E","0.4342944819032518");
-		self.define("SQRT1_2","0.70710678118654757");
-		self.define("TORAD","0.017453292519943295");
-		self.define("GOLDEN","1.618033988749895");
-        */
-        /*
-        self.local("df_pos", Kind::Vec2);
-        self.local("df_result", Kind::Vec4);
-        self.local("df_last_pos", Kind::Vec2);
-        self.local("df_start_pos", Kind::Vec2);
-        self.local("df_shape", Kind::Float);
-        self.local("df_old_shape", Kind::Float);
-        self.local("df_blur", Kind::Float);
-        self.local("df_aa", Kind::Float);
-        self.local("df_scale", Kind::Float);
-        self.local("df_field", Kind::Float);
-        self.method("
-            vec2 df_viewport(vec2 pos){
+        self.add_ast(shader_ast!(||{
+            const PI:f32 = 3.141592653589793;
+        	const E:f32 =  2.718281828459045;
+            const LN2:f32 = 0.6931471805599453;
+            const LN10:f32 = 2.302585092994046;
+            const LOG2E:f32 = 1.4426950408889634;
+            const LOG10E:f32 = 0.4342944819032518;
+            const SQRT1_2:f32 = 0.70710678118654757;
+            const TORAD:f32 = 0.017453292519943295;
+            const GOLDEN:f32 = 1.618033988749895;
+
+            let df_pos:vec2<Local>;
+            let df_result:vec4<Local>;
+            let df_last_pos:vec2<Local>;
+            let df_start_pos:vec2<Local>;
+            let df_shape:float<Local>;
+            let df_old_shape:float<Local>;
+            let df_blur:float<Local>;
+            let df_aa:float<Local>;
+            let df_scale:float<Local>;
+            let df_field:float<Local>;
+
+            fn df_viewport(pos:vec2)->vec2{
                 df_pos = pos;
                 df_result = vec4(0.);
                 df_old_shape =
@@ -554,183 +554,162 @@ impl Shader{
                 df_field = 0.0;
                 return df_pos;
             }
-        ");
-        self.method("
-            float df_antialias(vec2 p){
-                return 1.0 / length(vec2(length(dFdx(p)), length(dFdy(p))));
+            
+            fn df_antialias(p:vec2)->float{
+                return 1.0 / length(vec2(length(dfdx(p)), length(dfdy(p))));
             }
-        ");
-        self.method("
-            vec2 df_translate(float x, float y){
+
+            fn df_translate(x:float, y:float)->vec2{
                 df_pos -= vec2(x, y);
+                return df_pos;
             }
-        ");
-        self.method("
-            void df_rotate(float a, float x, float y) {$
-                float ca = cos(-a);
-                float sa = sin(-a);
-                vec2 p = df_pos - vec2(x, y);
+
+            fn df_rotate(a:float, x:float, y:float) {
+                let ca:float = cos(-a);
+                let sa:float = sin(-a);
+                let p:vec2 = df_pos - vec2(x, y);
                 df_pos = vec2(p.x * ca - p.y * sa, p.x * sa + p.y * ca) + vec2(x, y);
             }
-        ");
-        self.method("
-            void df_scale(float f, float x, float y) {$
-                df_scale *= f
-                df_pos = (df_pos - vec2(x, y)) * f + vec2(x, y)
+
+            fn df_scale(f:float, x:float, y:float) {
+                df_scale *= f;
+                df_pos = (df_pos - vec2(x, y)) * f + vec2(x, y);
             }
-        ");
-        self.method("
-            void df_clear(vec4 color){
-                df_result = vec4(color.rgb * color.a + df_result.rgb * (1. - color.a), color.a);
+
+            fn df_clear(color:vec4){
+                df_result = vec4(color.rgb * color.a + df_result.rgb * (1.0 - color.a), color.a);
             }
-        ");
-        self.method(
-            "float df_calc_blur(float w) {
-                float f = w - df_blur;
-                float wa = clamp(-w * df_aa, 0., 1.);
-                float wb = df_blur < 0.0001?1.0:clamp(-w / df_blur, 0., 1.);
+
+            fn df_calc_blur(w:float)->float{
+                //let f:float = w - df_blur;
+                let wa:float = clamp(-w * df_aa, 0.0, 1.0);
+                let wb:float = 1.0;
+                if df_blur > 0.0001{
+                    wb = clamp(-w / df_blur, 0.0, 1.0)
+                }
                 return wa * wb;
-            }"
-        );
-        self.method("
-            void df_fill_keep(vec4 color) {
-                float f = df_calc_blur(df_shape);
-                vec4 source = vec4(color.rgb * color.a, color.a);
-                vec4 dest = df_result;
+            }
+            
+            fn df_fill_keep(color:vec4) {
+                let f:float = df_calc_blur(df_shape);
+                let source:vec4 = vec4(color.rgb * color.a, color.a);
+                let dest:vec4 = df_result;
                 df_result = source * f + dest * (1. - source.a * f);
             }
-        ");
-        self.method("
-            vec4 df_fill(vec4 color) {
+
+            fn df_fill(color:vec4)->vec4 {
                 df_fill_keep(color);
                 df_old_shape = df_shape = 1e+20;
                 return df_result;
             }
-        ");
-        self.method("
-            void df_stroke_keep(vec4 color, float width) {
-                float f = df_calc_blur(abs(df_shape) - width / df_scale);
-                vec4 source = vec4(color.rgb * color.a, color.a);
-                vec4 dest = df_result;
-                df_result = source * f + dest * (1. - source.a * f);
+
+            fn df_stroke_keep(color:vec4, width:float) {
+                let f:float = df_calc_blur(abs(df_shape) - width / df_scale);
+                let source:vec4 = vec4(color.rgb * color.a, color.a);
+                let dest:vec4 = df_result;
+                df_result = source * f + dest * (1.0 - source.a * f);
             }
-        ");
-        self.method("
-            vec4 df_stroke(vec4 color, float width) {
+
+            fn df_stroke(color:vec4, width:float)->vec4{
                 df_stroke_keep(color, width);
                 df_old_shape = df_shape = 1e+20;
                 return df_result;
             }
-        ");
-        self.method("
-            void df_glow_keep(vec4 color, float width) {
-                float f = df_calc_blur(abs(df_shape) - width / df_scale);
-                vec4 source = vec4(color.rgb * color.a, color.a);
-                vec4 dest = df_result;
+
+            fn df_glow_keep(color:vec4, width:float) {
+                let f:float = df_calc_blur(abs(df_shape) - width / df_scale);
+                let source:vec4 = vec4(color.rgb * color.a, color.a);
+                let dest:vec4 = df_result;
                 df_result = vec4(source.rgb * f, 0.) + dest;
             }
-        ");
-        self.method("
-            void df_glow(vec4 color, float width) {$
+
+            fn df_glow(color:vec4, width:float) {
                 df_glow_keep(color, width);
                 df_old_shape = df_shape = 1e+20;
             }
-        ");
-        self.method("
-            void df_union() {
+
+            fn df_union(){
                 df_old_shape = df_shape = min(df_field, df_old_shape);
             }
-        ");
-        self.method("
-            void df_intersect() {
+
+            fn df_intersect() {
                 df_old_shape = df_shape = max(df_field, df_old_shape);
             }
-        ");
-        self.method("
-            void df_subtract() {
+
+            fn df_subtract() {
                 df_old_shape = df_shape = max(-df_field, df_old_shape);
             }
-        ");
-        self.method("
-            void df_gloop(float k) {
-                var h = clamp(.5 + .5 * (df_old_shape - df_field) / k, 0., 1.);
+
+            fn df_gloop(k:float) {
+                let h:float = clamp(0.5 + 0.5 * (df_old_shape - df_field) / k, 0.0, 1.0);
                 df_old_shape = df_shape = mix(df_old_shape, df_field, h) - k * h * (1.0 - h);
             }
-        ");
-        self.method("
-            void df_blend(float k){
+
+            fn df_blend(k:float){
                 df_old_shape = df_shape = mix(df_old_shape, df_field, k);
             }
-        ");
-        self.method("
-            void df_circle(float x, float y, float r) {
-                vec2 c = df_pos - vec2(x, y);
+
+            fn df_circle(x:float, y:float, r:float) {
+                let c:vec2 = df_pos - vec2(x, y);
                 df_field = (length(c.xy) - r) / df_scale;
                 df_old_shape = df_shape;
                 df_shape = min(df_shape, df_field);
             }
-        ");
-        self.method("
-            void df_box(float x, float y, float w, float h, float r) {
-                vec2 p = df_pos - vec2(x, y);
-                vec2 size = vec2(.5 * w, .5 * h);
-                vec2 bp = max(abs(p - size.xy) - (size.xy - vec2(2. * r).xy), vec2(0.));
+
+            fn df_box(x:float, y:float, w:float, h:float, r:float) {
+                let p:vec2 = df_pos - vec2(x, y);
+                let size:vec2 = vec2(0.5 * w, 0.5 * h);
+                let bp:vec2 = max(abs(p - size.xy) - (size.xy - vec2(2. * r).xy), vec2(0.));
                 df_field = (length(bp) - 2. * r) / df_scale;
                 df_old_shape = df_shape;
                 df_shape = min(df_shape, df_field);
             }
-        ");
-        self.method("
-            void df_rect(float x, float y, float w, float h) {
-                vec2 s = vec2(w, h) * .5;
-                vec2 d = abs(vec2(x, y) - this.pos + s) - s;
-                vec2 dm = min(d, vec2(0.));
+
+            fn df_rect(x:float, y:float, w:float, h:float) {
+                let s:vec2 = vec2(w, h) * 0.5;
+                let d:vec2 = abs(vec2(x, y) - this.pos + s) - s;
+                let dm:vec2 = min(d, vec2(0.));
                 df_field = max(dm.x, dm.y) + length(max(d, vec2(0.)));
                 df_old_shape = df_shape;
                 df_shape = min(df_shape, df_field);
             }
-        ");
-        self.method("
-            void df_move_to(float x, float y) {
+
+            fn df_move_to(x:float, y:float) {
                 df_last_pos =
                 df_start_pos = vec2(x, y);
             }
-        ");
-        self.method("
-            void df_line_to(float x, float y) {
-                vec2 p = vec2(x, y);
 
-                vec2 pa = df_pos - df_last_pos;
-                vec2 ba = p - df_last_pos;
-                float h = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.);
+            fn df_line_to(x:float, y:float) {
+                let p:vec2 = vec2(x, y);
+
+                let pa:vec2 = df_pos - df_last_pos;
+                let ba:vec2 = p - df_last_pos;
+                let h:float = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
                 df_field = length(pa - ba * h) / df_scale;
                 df_old_shape = df_shape;
                 df_shape = min(df_shape, df_field);
                 df_last_pos = p;
             }
-        ");
-        self.method("
-            void df_close_path() {
+ 
+            fn df_close_path() {
                 df_line_to(df_start_pos.x, df_start_pos.y);
             }
-        ");
-        self.method("    
-            vec4 df_hsv2rgb(vec4 c) { //http://gamedev.stackexchange.com/questions/59797/glsl-shader-change-hue-saturation-brightness
-                vec4 K = vec4(1., 2. / 3., 1. / 3., 3.);
-                vec4 p = abs(fract(c.xxx + K.xyz) * 6. - K.www);
-                return vec4(c.z * mix(K.xxx, clamp(p - K.xxx, 0., 1.), c.y), c.w);
+
+            fn df_hsv2rgb(c:vec4)->vec4 { //http://gamedev.stackexchange.com/questions/59797/glsl-shader-change-hue-saturation-brightness
+                let K:vec4 = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                let p:vec4 = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return vec4(c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y), c.w);
             }
-        ");
-        self.method("    
-            vec4 df_rgb2hsv(vec4 c) {
-                vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+            fn df_rgb2hsv(c:vec4)->vec4 {
+                let K:vec4 = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                let p:vec4 = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                let q:vec4 = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
                 
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
+                let d:float = q.x - min(q.w, q.y);
+                let e:float = 1.0e-10;
                 return vec4(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x, c.w);
             }
-        ");*/
+        }));
     }
 }

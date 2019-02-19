@@ -38,6 +38,12 @@ pub struct SlCx<'a>{
     pub auto_vary:Vec<ShVar>
 }
 
+pub enum MapCallResult{
+    Rename(String),
+    Rewrite(String, String),
+    None
+}
+
 impl<'a> SlCx<'a>{
     pub fn scan_scope(&self, name:&str)->Option<&str>{
         if let Some(decl) = self.scope.iter().find(|i| i.name == name){
@@ -138,17 +144,18 @@ impl ShField{
         else{
             let mut mode = 0;
             let slots = shty.slots;
+            
             if shty.name != "float" && shty.name != "vec2" && shty.name != "vec3" && shty.name != "vec4"{
                 return  Err(SlErr{
                     msg:format!("member {} not found {}", self.member, base.ty)
                 })
             }
-            if shty.name.len() >4 {
+            if self.member.len() >4 {
                 return  Err(SlErr{
                     msg:format!("member {} not found or a valid swizzle of {}", self.member, base.ty)
                 })
             }
-            for chr in shty.name.chars(){
+            for chr in self.member.chars(){
                 if chr == 'x' || chr == 'y' || chr == 'z' || chr == 'w'{
                     if chr == 'y' && slots<2{ mode = 3;}
                     else if chr == 'z' && slots<3{ mode = 3;}
@@ -172,7 +179,8 @@ impl ShField{
                     }
                 }
             }
-            match shty.name.len(){
+
+            match self.member.len(){
                 1=>return Ok(Sl{
                     sl:format!("{}.{}", base.sl, self.member),
                     ty:"float".to_string()
@@ -352,82 +360,107 @@ impl ShCall{
                 defargs_call = cx.defargs_call.to_string();
                 out.push_str(&cx.call_prefix);
             };
-            out.push_str(&self.call);
-            out.push_str("(");
+            
+
             // lets check our args and compose return type
             let mut gen_t = "".to_string();
+
+            let mut args_gl = Vec::new();
             // loop over args and typecheck / fill in generics
             for (i, arg) in self.args.iter().enumerate(){
                 let arg_gl = arg.sl(cx)?;
-                let in_ty = arg_gl.ty;
-                if i != 0{
-                    out.push_str(", ");
-                }
-                out.push_str(&arg_gl.sl);
-                // lets check the type against our shfn
-                if i >= shfn.args.len(){
-                    return Err(SlErr{
-                        msg:format!("Too many function arguments for call {} got:{} can use:{}", self.call, i+1, shfn.args.len())
-                    })
-                }
-                // lets check our arg type
-                let fnarg = &shfn.args[i];
-                // lets see if ty is "T" or "O" or "F" or "B"
-                if fnarg.ty == "T"{
-                    // we already have a gen_t but its not the same
-                    if gen_t != "" && gen_t != in_ty{
-                        return Err(SlErr{
-                            msg:format!("Function type T incorrectly redefined for call {} type {} as {} for arg {}", self.call, gen_t, in_ty, i) 
-                        })
-                    }
-                    gen_t = in_ty;
-                }
-                else if fnarg.ty == "F"{ // we have to be a float type
-                    if in_ty != "float" && in_ty != "vec2" && in_ty != "vec3" && in_ty != "vec4"{
-                        return Err(SlErr{
-                            msg:format!("Function type F is not a float-ty type for call {} for arg {} type {}", self.call, i, in_ty) 
-                        })
-                    }
-                }
-                else if fnarg.ty == "B"{ // have to be a boolvec
-                    if in_ty != "bool" && in_ty != "bvec2" && in_ty != "bvec3" && in_ty != "bvec4"{
-                        return Err(SlErr{
-                            msg:format!("Function arg is not a bool-ty type for call {} for arg {} type {}", self.call, i, in_ty) 
-                        })
-                    }
-                    gen_t = in_ty;
-                }
-                else if fnarg.ty != in_ty{
-                    return Err(SlErr{
-                        msg:format!("Arg wrong type for call {} for arg {} expected type {} got type {}", self.call, i, fnarg.ty, in_ty)
-                    })
-                }
-            }
-            // we have less args provided than the fn signature
-            // check if they were optional
-            if self.args.len() < shfn.args.len(){
-                for i in self.args.len()..shfn.args.len(){
-                    let fnarg = &shfn.args[i];
-                    if fnarg.ty != "O"{
-                        return Err(SlErr{
-                            msg:format!("Not enough args for call {} not enough args provided at {}, possible {}", self.call, i, shfn.args.len())
-                        })
-                    }
-                }
+                args_gl.push(arg_gl);
             };
-            let ret_ty = if shfn.ret == "T" || shfn.ret == "B"{
-                gen_t
+
+            let map_call= cx.map_call(&self.call, &args_gl);
+            let ret_ty;
+            
+            if let MapCallResult::Rewrite(rewrite, rty) = map_call{
+                out.push_str(&rewrite);
+                ret_ty = rty;
             }
             else{
-                shfn.ret.clone()
-            };
-            if defargs_call.len() != 0{
-                if self.args.len() != 0{
-                    out.push_str(", ");
+                if let MapCallResult::Rename(name) = map_call{
+                    out.push_str(&name);
                 }
-                out.push_str(&defargs_call);
+                else{
+                    out.push_str(&self.call);
+                }
+                out.push_str("(");
+                
+                // loop over args and typecheck / fill in generics
+                for (i, arg_gl) in args_gl.iter().enumerate(){
+                    //let arg_gl = args_gl[i];//.sl(cx)?;
+                    let in_ty = arg_gl.ty.clone();
+                    if i != 0{
+                        out.push_str(", ");
+                    }
+                    out.push_str(&arg_gl.sl);
+                    // lets check the type against our shfn
+                    if i >= shfn.args.len(){
+                        return Err(SlErr{
+                            msg:format!("Too many function arguments for call {} got:{} can use:{}", self.call, i+1, shfn.args.len())
+                        })
+                    }
+                    // lets check our arg type
+                    let fnarg = &shfn.args[i];
+                    // lets see if ty is "T" or "O" or "F" or "B"
+                    if fnarg.ty == "T"{
+                        // we already have a gen_t but its not the same
+                        if gen_t != "" && gen_t != in_ty{
+                            return Err(SlErr{
+                                msg:format!("Function type T incorrectly redefined for call {} type was {} given {} for arg {}", self.call, gen_t, in_ty, i) 
+                            })
+                        }
+                        gen_t = in_ty;
+                    }
+                    else if fnarg.ty == "F"{ // we have to be a float type
+                        if in_ty != "float" && in_ty != "vec2" && in_ty != "vec3" && in_ty != "vec4"{
+                            return Err(SlErr{
+                                msg:format!("Function type F is not a float-ty type for call {} for arg {} type {}", self.call, i, in_ty) 
+                            })
+                        }
+                    }
+                    else if fnarg.ty == "B"{ // have to be a boolvec
+                        if in_ty != "bool" && in_ty != "bvec2" && in_ty != "bvec3" && in_ty != "bvec4"{
+                            return Err(SlErr{
+                                msg:format!("Function arg is not a bool-ty type for call {} for arg {} type {}", self.call, i, in_ty) 
+                            })
+                        }
+                        gen_t = in_ty;
+                    }
+                    else if fnarg.ty != in_ty{
+                        return Err(SlErr{
+                            msg:format!("Arg wrong type for call {} for arg {} expected type {} got type {}", self.call, i, fnarg.ty, in_ty)
+                        })
+                    }
+                }
+                // we have less args provided than the fn signature
+                // check if they were optional
+                if self.args.len() < shfn.args.len(){
+                    for i in self.args.len()..shfn.args.len(){
+                        let fnarg = &shfn.args[i];
+                        if fnarg.ty != "O"{
+                            return Err(SlErr{
+                                msg:format!("Not enough args for call {} not enough args provided at {}, possible {}", self.call, i, shfn.args.len())
+                            })
+                        }
+                    }
+                };
+                ret_ty = if shfn.ret == "T" || shfn.ret == "B"{
+                    gen_t
+                }
+                else{
+                    shfn.ret.clone()
+                };
+                if defargs_call.len() != 0{
+                    if self.args.len() != 0{
+                        out.push_str(", ");
+                    }
+                    out.push_str(&defargs_call);
+                }
+                out.push_str(")");
             }
-            out.push_str(")");
             // check our arg types
             // if our return type is T,
             // use one of the args marked T as its type
@@ -626,7 +659,7 @@ impl ShFn{
             out.push_str(&arg.name);
             cx.scope.push(SlDecl{
                 name:arg.name.clone(),
-                ty:cx.map_type(&arg.ty)
+                ty:arg.ty.clone()
             });
         };
         if cx.defargs_fn.len() != 0{

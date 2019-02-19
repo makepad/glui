@@ -43,66 +43,60 @@ impl Text{
             0,1,2,
             2,3,0
         ];
-/*
-        sh.geometry("geom", Kind::Vec2);
-        
-        sh.sampler("tex_sampler", Sampler::Sampler2D);
-        sh.uniform("tex_size", Kind::Vec2);
-        sh.uniform("list_clip", Kind::Vec4);
 
-        sh.instance("draw_clip", Kind::Vec4);
+        sh.add_ast(shader_ast!(||{
+            let geom:vec2<Geometry>;
+            let texture:texture2d<Texture>;
+            let tex_size:vec2<Uniform>;
+            let list_clip:vec4<Uniform>;
+            let draw_clip:vec4<Instance>;
+            let font_geom:vec4<Instance>;
+            let font_tc:vec4<Instance>;
+            let color:vec4<Instance>;
+            let x:float<Instance>;
+            let y:float<Instance>;
+            let font_size:float<Instance>;
+            let font_base:float<Instance>;
+            let tex_coord:vec2<Varying>;
 
-        sh.instance("font_g", Kind::Vec4);
-        sh.instance("font_t", Kind::Vec4);
-        sh.instancev("color", Kind::Vec4);
-        sh.instance("x", Kind::Float);
-        sh.instance("y", Kind::Float);
-
-        sh.instance("font_size", Kind::Float);
-        sh.instance("font_base", Kind::Float);
-        
-        sh.varying("tex_coord", Kind::Vec2);
-
-        sh.method("
-            vec4 pixel(){
-                vec4 s = texture2D(tex_sampler, tex_coord);
-                float sig_dist =  max(min(s.r, s.g), min(max(s.r, s.g), s.b)) - .5;
+            fn pixel()->vec4{
+                
+                let s:vec4 = sample2d(texture, tex_coord);
+                let sig_dist:float =  max(min(s.r, s.g), min(max(s.r, s.g), s.b)) - 0.5;
 
                 df_viewport(tex_coord * tex_size * 0.07);
                 df_shape = -sig_dist - 0.5 / df_aa;
 
                 return df_fill(color);
-            }   
-        ");
-        sh.method("
-            vec4 vertex(){
-                vec2 shift = vec2(0.0,0.0);
-                vec2 min_pos = vec2(
-                    x + font_size * font_g.x,
-                    y - font_size * font_g.y + font_size * font_base
+            }
+            
+            fn vertex()->vec4{
+                let shift:vec2 = vec2(0.0,0.0);
+                let min_pos:vec2 = vec2(
+                    x + font_size * font_geom.x,
+                    y - font_size * font_geom.y + font_size * font_base
                 );
-                vec2 max_pos = vec2(
-                    x + font_size * font_g.z,
-                    y - font_size * font_g.w + font_size * font_base
+                let max_pos:vec2 = vec2(
+                    x + font_size * font_geom.z,
+                    y - font_size * font_geom.w + font_size * font_base
                 );
                 
-                vec2 clipped = clamp(
+                let clipped:vec2 = clamp(
                     mix(min_pos, max_pos, geom) + shift,
                     max(draw_clip.xy, list_clip.xy),
                     min(draw_clip.zw, list_clip.zw)
                 );
-                vec2 normalized = (clipped - min_pos - shift) / (max_pos - min_pos);
+                let normalized:vec2 = (clipped - min_pos - shift) / (max_pos - min_pos);
 
                 tex_coord = mix(
-                    font_t.xy,
-                    font_t.zw,
+                    font_tc.xy,
+                    font_tc.zw,
                     normalized.xy
                 );
-                return vec4(clipped*vec2(0.01,0.01),0.,1.);
+
+                return vec4(clipped*vec2(0.01,-0.01),0.,1.);
             }
-        ");
-        sh.log =1;
-        */
+        }));
     }
 
     pub fn draw_text(&mut self, cx:&mut Cx, text:&str){
@@ -110,7 +104,7 @@ impl Text{
         let font = cx.fonts.get(self.font_id, &mut cx.textures);
         let turtle = &mut cx.turtle;
         if dr.first{
-            dr.usampler("tex_sampler", font.texture_id);
+            dr.texture("texture", font.texture_id);
             dr.uvec2f("tex_size", font.width as f32, font.height as f32);
             dr.uvec4f("list_clip", -50000.0,-50000.0,50000.0,50000.0);
         }
@@ -128,8 +122,8 @@ impl Text{
            
             let glyph = &font.glyphs[slot];
             dr.vec4f("draw_clip", -50000.0,-50000.0,50000.0,50000.0);
-            dr.vec4f("font_g",glyph.x1 ,glyph.y1 ,glyph.x2 ,glyph.y2);
-            dr.vec4f("font_t",glyph.tx1 ,glyph.ty1 ,glyph.tx2 ,glyph.ty2);
+            dr.vec4f("font_geom",glyph.x1 ,glyph.y1 ,glyph.x2 ,glyph.y2);
+            dr.vec4f("font_tc",glyph.tx1 ,glyph.ty1 ,glyph.tx2 ,glyph.ty2);
             dr.vec4f("color",1.0,1.0,1.0,1.0);
             dr.float("x", turtle.x);
             dr.float("y", turtle.y);

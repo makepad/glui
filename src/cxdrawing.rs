@@ -49,7 +49,7 @@ impl CxDrawing{
                 shader_id:sh.shader_id,
                 instance:Vec::new(),
                 uniforms:Vec::new(),
-                samplers:Vec::new(),
+                textures:Vec::new(),
                 first:true,
                 update_frame_id:self.frame_id,
                 vao:CxShaders::create_vao(sh),
@@ -74,7 +74,7 @@ impl CxDrawing{
         // truncate buffers and set update frame
         draw.instance.truncate(0);
         draw.uniforms.truncate(0);
-        draw.samplers.truncate(0);
+        draw.textures.truncate(0);
         draw.update_frame_id = self.frame_id;
         draw.first = true;
         draw
@@ -93,7 +93,7 @@ pub struct Draw{
     pub shader_id:usize, // if shader_id changed, delete gl vao
     pub instance:Vec<f32>,
     pub uniforms:Vec<f32>,  // draw uniforms
-    pub samplers:Vec<usize>,
+    pub textures:Vec<usize>,
     pub update_frame_id: usize,
     pub vao:GLInstanceVAO,
     pub buffers:DrawBuffers,
@@ -141,9 +141,9 @@ impl Draw{
         self.instance.push(v.w);
     }
 
-    pub fn usampler(&mut self, _name: &str, texture_id: usize){
+    pub fn texture(&mut self, _name: &str, texture_id: usize){
         // how do we store these?
-        self.samplers.push(texture_id);
+        self.textures.push(texture_id);
     }
 
     pub fn ufloat(&mut self, _name: &str, v:f32){

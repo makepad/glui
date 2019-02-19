@@ -357,7 +357,7 @@ fn generate_expr(expr:Expr)->TokenStream{
             return quote!{
                ShExpr::ShIf(ShIf{
                    cond:Box::new(#cond),
-                   then_branch:Box::new(#then_branch),
+                   then_branch:#then_branch,
                    else_branch:None
                 })
             }

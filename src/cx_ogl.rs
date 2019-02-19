@@ -94,7 +94,7 @@ impl Cx{
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_cx, &self.uniforms);
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dl, &draw_list.uniforms);
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dr, &draw.uniforms);
-                    CxShaders::set_samplers(&shgl.samplers, &draw.samplers, &self.textures);
+                    CxShaders::set_texture_slots(&shgl.texture_slots, &draw.textures, &self.textures);
                     gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
                 }
             }

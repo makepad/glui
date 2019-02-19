@@ -1,45 +1,57 @@
 use crate::shader::*;
-use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
 
-use cocoa::foundation::{NSRange, NSAutoreleasePool};
+use cocoa::foundation::{NSRange};
 use metal::*;
 
 impl<'a> SlCx<'a>{
+    pub fn map_call(&self, name:&str, args:&Vec<Sl>)->MapCallResult{
+        match name{
+            "sample2d"=>{ // transform call to
+                let base = &args[0];
+                let coord = &args[1];
+                return MapCallResult::Rewrite(
+                    format!("{}.sample(sampler(mag_filter::linear,min_filter::linear),{})", base.sl, coord.sl),
+                    "vec4".to_string()
+                )
+            },
+            _=>return MapCallResult::None
+        }
+    }    
     pub fn map_type(&self, ty:&str)->String{
         CxShaders::type_to_metal(ty)
     }
 
     pub fn map_var(&mut self, var:&ShVar)->String{
-        let prefix;
+        let mty = CxShaders::type_to_metal(&var.ty);
         match var.store{
-            ShVarStore::Uniform=>prefix = "_uni_dr.",
-            ShVarStore::UniformDl=>prefix = "_uni_dl.",
-            ShVarStore::UniformCx=>prefix = "_uni_cx.",
+            ShVarStore::Uniform=>return format!("{}(_uni_dr.{})", mty, var.name),
+            ShVarStore::UniformDl=>return format!("{}(_uni_dl.{})", mty, var.name),
+            ShVarStore::UniformCx=>return format!("{}(_uni_cx.{})", mty, var.name),
             ShVarStore::Instance=>{
                 if let SlTarget::Pixel = self.target{
                     self.auto_vary.push(var.clone());
-                    prefix = "_vary.";
+                    return format!("_vary.{}",var.name);
                 }
                 else{
-                    prefix = "_inst.";
+                    return format!("{}(_inst.{})", mty, var.name);
                 }
             },
             ShVarStore::Geometry=>{
                 if let SlTarget::Pixel = self.target{
                     self.auto_vary.push(var.clone());
-                    prefix = "_vary.";
+                    return format!("_vary.{}",var.name);
                 }
                 else{
-                    prefix = "_geom.";
+                    
+                    return format!("{}(_geom.{})", mty, var.name);
                 }
             },
-            ShVarStore::Sampler2D=>prefix = "_sampler_2d.",
-            ShVarStore::Local=>prefix = "_loc.",
-            ShVarStore::Varying=>prefix = "_vary.",
+            ShVarStore::Texture=>return format!("_tex.{}",var.name),
+            ShVarStore::Local=>return format!("_loc.{}",var.name),
+            ShVarStore::Varying=>return format!("_vary.{}",var.name),
         }
-        format!("{}{}", prefix, var.name)
     }
 }
 
@@ -52,7 +64,7 @@ pub struct AssembledMtlShader{
     pub uniforms_dr: Vec<ShVar>,
     pub uniforms_dl: Vec<ShVar>,
     pub uniforms_cx: Vec<ShVar>,
-    pub samplers_2d:Vec<ShVar>,
+    pub texture_slots:Vec<ShVar>,
 
     pub mtlsl:String,
 }
@@ -118,7 +130,6 @@ pub struct CxBuffers{
 pub struct DrawListBuffers{
      pub uni_dl:MetalBuffer
 }
-
 
 #[derive(Default,Clone)]
 pub struct DrawBuffers{
@@ -200,6 +211,7 @@ impl CxShaders{
             "mat2"=>"float2x2".to_string(),
             "mat3"=>"float3x3".to_string(),
             "mat4"=>"float4x4".to_string(),
+            "texture2d"=>"texture2d<float>".to_string(),
             ty=>ty.to_string()
         }
     }
@@ -228,12 +240,25 @@ impl CxShaders{
         out
     }
 
+    pub fn assemble_texture_slots(textures:&Vec<ShVar>)->String{
+        let mut out = String::new();
+        out.push_str("struct ");
+        out.push_str("_Tex{\n");
+        for (i, tex) in textures.iter().enumerate(){
+            out.push_str("texture2d<float> ");
+            out.push_str(&tex.name);
+            out.push_str(&format!(" [[texture({})]];\n", i));
+        };
+        out.push_str("};\n\n");
+        out
+    }
+
     pub fn assemble_shader(sh:&Shader)->Result<AssembledMtlShader, SlErr>{
         
         let mut mtl_out = "#include <metal_stdlib>\nusing namespace metal;\n".to_string();
 
         // ok now define samplers from our sh. 
-        let samplers_2d = sh.flat_vars(ShVarStore::Sampler2D);
+        let texture_slots = sh.flat_vars(ShVarStore::Texture);
         let geometries = sh.flat_vars(ShVarStore::Geometry);
         let instances = sh.flat_vars(ShVarStore::Instance);
         let mut varyings = sh.flat_vars(ShVarStore::Varying);
@@ -254,12 +279,14 @@ impl CxShaders{
         mtl_out.push_str(&Self::assemble_struct("_UniDr", &uniforms_dr, true, ""));
         mtl_out.push_str(&Self::assemble_struct("_Loc", &locals, false, ""));
 
+        // we need to figure out which texture slots exist 
+        mtl_out.push_str(&Self::assemble_texture_slots(&texture_slots));
 
         let mut vtx_cx = SlCx{
             depth:0,
             target:SlTarget::Vertex,
-            defargs_fn:"thread _Loc &_loc, thread _Vary &_vary, thread _Geom &_geom, thread _Inst &_inst, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
-            defargs_call:"_loc, _vary, _geom, _inst, _uni_cx, _uni_dl, _uni_dr".to_string(),
+            defargs_fn:"_Tex _tex, thread _Loc &_loc, thread _Vary &_vary, thread _Geom &_geom, thread _Inst &_inst, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
+            defargs_call:"_tex, _loc, _vary, _geom, _inst, _uni_cx, _uni_dl, _uni_dr".to_string(),
             call_prefix:"_".to_string(),
             shader:sh,
             scope:Vec::new(),
@@ -271,8 +298,8 @@ impl CxShaders{
         let mut pix_cx = SlCx{
             depth:0,
             target:SlTarget::Pixel,
-            defargs_fn:"thread _Loc &_loc, thread _Vary &_vary, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
-            defargs_call:"_loc, _vary, _uni_cx, _uni_dl, _uni_dr".to_string(),
+            defargs_fn:"_Tex _tex, thread _Loc &_loc, thread _Vary &_vary, device _UniCx &_uni_cx, device _UniDl &_uni_dl, device _UniDr &_uni_dr".to_string(),
+            defargs_call:"_tex, _loc, _vary, _uni_cx, _uni_dl, _uni_dr".to_string(),
             call_prefix:"_".to_string(),
             shader:sh,
             scope:Vec::new(),
@@ -295,7 +322,7 @@ impl CxShaders{
         mtl_out.push_str(&pix_fns);
 
         // lets define the vertex shader
-        mtl_out.push_str("vertex _Vary _vertex_shader(device _Geom *in_geometries [[buffer(0)]], device _Inst *in_instances [[buffer(1)]],\n");
+        mtl_out.push_str("vertex _Vary _vertex_shader(_Tex _tex, device _Geom *in_geometries [[buffer(0)]], device _Inst *in_instances [[buffer(1)]],\n");
         mtl_out.push_str("  device _UniCx &_uni_cx [[buffer(2)]], device _UniDl &_uni_dl [[buffer(3)]], device _UniDr &_uni_dr [[buffer(4)]],\n");
         mtl_out.push_str("  uint vtx_id [[vertex_id]], uint inst_id [[instance_id]]){\n");
         mtl_out.push_str("  _Loc _loc;\n");
@@ -326,31 +353,23 @@ impl CxShaders{
         mtl_out.push_str("       return _vary;\n");
         mtl_out.push_str("};\n");
         // then the fragment shader
-        mtl_out.push_str("fragment float4 _fragment_shader(_Vary _vary[[stage_in]],\n");
+        mtl_out.push_str("fragment float4 _fragment_shader(_Vary _vary[[stage_in]],_Tex _tex,\n");
         mtl_out.push_str("  device _UniCx &_uni_cx [[buffer(0)]], device _UniDl &_uni_dl [[buffer(1)]], device _UniDr &_uni_dr [[buffer(2)]]){\n");
         mtl_out.push_str("  _Loc _loc;\n");
         mtl_out.push_str("  return _pixel(");
         mtl_out.push_str(&pix_cx.defargs_call);
         mtl_out.push_str(");\n};\n");
 
-
-
-        // alright lets make some metal source
-        // we have to compute the 'Varying struct
-        // we have to compute the uniform structs (cx, dl and dr)
-        // also have to compute the geometry struct and the instance struct
-        println!("---- Metal shader -----\n{}",mtl_out);
+        //if sh.log != 0{
+            println!("---- Metal shader -----\n{}",mtl_out);
+        //}
        
-        // lets composite our ShAst structure into a set of methods
         Ok(AssembledMtlShader{
-//            geometry_slots:geometry_slots,
             instance_slots:instance_slots,
-//            geometry_attribs:Self::ceil_div4(geometry_slots),
- //           instance_attribs:Self::ceil_div4(instance_slots),
             uniforms_dr:uniforms_dr,
             uniforms_dl:uniforms_dl,
             uniforms_cx:uniforms_cx,
-            samplers_2d:samplers_2d,
+            texture_slots:texture_slots,
             mtlsl:mtl_out
         })
     }
@@ -359,7 +378,6 @@ impl CxShaders{
         let ash = Self::assemble_shader(sh)?;
 
         let options = CompileOptions::new();
-        //let library = device.new_library_with_source(&ash.mtlsl, &options);
         let library = device.new_library_with_source(&ash.mtlsl, &options);
 
         match library{
@@ -399,42 +417,14 @@ impl CxShaders{
         }
     }
 
+    // TODO clear this away
     pub fn create_vao(_shgl:&CompiledShader)->GLInstanceVAO{
-       
-        // create the VAO
-         /*unsafe{
-            vao = mem::uninitialized();
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-            
-            // bind the vertex and indexbuffers
-            gl::BindBuffer(gl::ARRAY_BUFFER, shgl.geom_vb);
-            for attr in &shgl.geom_attribs{
-                gl::VertexAttribPointer(attr.loc, attr.size, gl::FLOAT, 0, attr.stride, attr.offset as *const () as *const _);
-                gl::EnableVertexAttribArray(attr.loc);
-            }
-
-            // create and bind the instance buffer
-            vb = mem::uninitialized();
-            gl::GenBuffers(1, &mut vb);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vb);
-            
-            for attr in &shgl.inst_attribs{
-                gl::VertexAttribPointer(attr.loc, attr.size, gl::FLOAT, 0, attr.stride, attr.offset as *const () as *const _);
-                gl::EnableVertexAttribArray(attr.loc);
-                gl::VertexAttribDivisor(attr.loc, 1 as gl::types::GLuint);
-            }
-
-            // bind the indexbuffer
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, shgl.geom_ib);
-            gl::BindVertexArray(0);
-        }*/
         GLInstanceVAO{
             vao:0,
             vb:0
         }
     }
 
-    pub fn destroy_vao(glivao:&mut GLInstanceVAO){
+    pub fn destroy_vao(_glivao:&mut GLInstanceVAO){
     }
 }
