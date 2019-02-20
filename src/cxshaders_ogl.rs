@@ -6,7 +6,6 @@ use crate::cxtextures::*;
 use crate::cxdrawing::*;
 use crate::cxshaders_shared::*;
 
-
 impl<'a> SlCx<'a>{
     pub fn map_call(&self, name:&str, _args:&Vec<Sl>)->MapCallResult{
         match name{
@@ -810,7 +809,7 @@ impl CxShaders{
         }
     }
 
-    pub fn set_texture_slots(locs:&Vec<GLUniform>, texture_ids:&Vec<usize>, cxtex:&CxTextures){
+    pub fn set_texture_slots(locs:&Vec<GLUniform>, texture_ids:&Vec<usize>, cxtex:&mut CxTextures){
         let mut o = 0;
         for loc in locs{
             let id = texture_ids[o];
@@ -819,9 +818,14 @@ impl CxShaders{
             }        
             
             if loc.loc >=0{
-                unsafe{
-                    let tex = &cxtex.textures[id];
-                    gl::BindTexture(gl::TEXTURE_2D, tex.gl_texture);
+                let mut tex = &mut cxtex.textures[id];
+                if tex.dirty{
+                    tex.upload_to_device();
+                }
+                if let Some(gl_texture) = tex.gl_texture{
+                    unsafe{
+                        gl::BindTexture(gl::TEXTURE_2D, gl_texture);
+                    }
                 }
             }
             else{

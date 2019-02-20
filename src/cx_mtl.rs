@@ -2,7 +2,7 @@ use std::mem;
 use std::ffi::CStr;
 
 use cocoa::base::id as cocoa_id;
-use cocoa::foundation::{NSAutoreleasePool};
+use cocoa::foundation::{NSAutoreleasePool,NSUInteger};
 use cocoa::appkit::{NSWindow, NSView};
 use core_graphics::geometry::CGSize;
 use objc::runtime::YES;
@@ -86,7 +86,7 @@ impl Cx{
                 let draw_list = &mut self.drawing.draw_lists[id];
                 let draw = &mut draw_list.draws[ci];
 
-                //let sh = &self.shaders.shaders[draw.shader_id];
+                let sh = &self.shaders.shaders[draw.shader_id];
                 let shc = &self.shaders.compiled_shaders[draw.shader_id];
                 
                 if draw.update_frame_id == self.drawing.frame_id{
@@ -115,10 +115,23 @@ impl Cx{
                     else{println!("Drawing error: uni_dl None")}
                     if let Some(buf) = &draw.buffers.uni_dr.buffer{encoder.set_fragment_buffer(2, Some(&buf), 0);}
                     else{println!("Drawing error: uni_dr None")}
+
+                    // lets set our textures
+                    for (i, texture_id) in draw.textures.iter().enumerate(){
+                        let tex = &mut self.textures.textures[*texture_id];
+                        if tex.dirty{
+                            tex.upload_to_device(device);
+                        }
+                        if let Some(mtltex) = &tex.mtltexture{
+                            encoder.set_fragment_texture(i as NSUInteger, Some(&mtltex));
+                            encoder.set_vertex_texture(i as NSUInteger, Some(&mtltex));
+                        }
+                    }
+
                     if let Some(buf) = &shc.geom_ibuf.buffer{
                         encoder.draw_indexed_primitives_instanced(
                             MTLPrimitiveType::Triangle,
-                            3, // Index Count
+                            sh.geometry_indices.len() as u64, // Index Count
                             MTLIndexType::UInt32, // indexType,
                             &buf, // index buffer
                             0, // index buffer offset
@@ -197,7 +210,7 @@ impl Cx{
                 let color_attachment = render_pass_descriptor.color_attachments().object_at(0).unwrap();
                 color_attachment.set_texture(Some(drawable.texture()));
                 color_attachment.set_load_action(MTLLoadAction::Clear);
-                color_attachment.set_clear_color(MTLClearColor::new(0.5, 0.2, 0.2, 1.0));
+                color_attachment.set_clear_color(MTLClearColor::new(0.3, 0.3, 0.3, 1.0));
                 color_attachment.set_store_action(MTLStoreAction::Store);
 
                 let command_buffer = command_queue.new_command_buffer();

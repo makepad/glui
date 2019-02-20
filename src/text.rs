@@ -19,7 +19,7 @@ impl Style for Text{
         Self::def_shader(&mut sh);
         Self{
             shader_id:cx.shaders.add(sh),
-            font_id:cx.fonts.load("ubuntu_regular_256.font"),
+            font_id:cx.fonts.load("ubuntu_regular_256.font", &mut cx.textures),
             text:"".to_string(),
             x:0.0,
             y:0.0,
@@ -41,7 +41,7 @@ impl Text{
         ];
         sh.geometry_indices = vec![
             0,1,2,
-            2,3,0
+            0,3,2
         ];
 
         sh.add_ast(shader_ast!(||{
@@ -60,14 +60,13 @@ impl Text{
             let tex_coord:vec2<Varying>;
 
             fn pixel()->vec4{
-                
-                let s:vec4 = sample2d(texture, tex_coord);
+                let s:vec4 = sample2d(texture, tex_coord.xy);
                 let sig_dist:float =  max(min(s.r, s.g), min(max(s.r, s.g), s.b)) - 0.5;
 
                 df_viewport(tex_coord * tex_size * 0.07);
                 df_shape = -sig_dist - 0.5 / df_aa;
 
-                return df_fill(color);
+                return df_fill(color); 
             }
             
             fn vertex()->vec4{
@@ -93,7 +92,7 @@ impl Text{
                     font_tc.zw,
                     normalized.xy
                 );
-
+                //tex_coord.xy = vec2(1.)-tex_coord.xy;
                 return vec4(clipped*vec2(0.01,-0.01),0.,1.);
             }
         }));
@@ -101,7 +100,7 @@ impl Text{
 
     pub fn draw_text(&mut self, cx:&mut Cx, text:&str){
         let dr = cx.drawing.instance(cx.shaders.get(self.shader_id));
-        let font = cx.fonts.get(self.font_id, &mut cx.textures);
+        let font = cx.fonts.get(self.font_id);
         let turtle = &mut cx.turtle;
         if dr.first{
             dr.texture("texture", font.texture_id);

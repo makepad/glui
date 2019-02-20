@@ -94,7 +94,7 @@ impl Cx{
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_cx, &self.uniforms);
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dl, &draw_list.uniforms);
                     CxShaders::set_uniform_buffer_fallback(&shgl.uniforms_dr, &draw.uniforms);
-                    CxShaders::set_texture_slots(&shgl.texture_slots, &draw.textures, &self.textures);
+                    CxShaders::set_texture_slots(&shgl.texture_slots, &draw.textures, &mut self.textures);
                     gl::DrawElementsInstanced(gl::TRIANGLES, indices as i32, gl::UNSIGNED_INT, ptr::null(), instances as i32);
                 }
             }
@@ -129,6 +129,9 @@ impl Cx{
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
             gl::Enable(gl::DEPTH_TEST);
             gl::DepthFunc(gl::LESS);
+            gl::BlendEquationSeparate(gl::FUNC_ADD, gl::FUNC_ADD);
+            gl::BlendFuncSeparate(gl::ONE, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
+            gl::Enable(gl::BLEND);            
 
             //let mut num_extensions = 0;
             //gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_extensions);

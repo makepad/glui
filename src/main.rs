@@ -31,7 +31,6 @@ mod cxturtle;
 mod math;
 mod shader;
 
-mod font;
 mod rect;
 mod text;
 mod button;

@@ -367,7 +367,7 @@ impl ShCall{
 
             let mut args_gl = Vec::new();
             // loop over args and typecheck / fill in generics
-            for (i, arg) in self.args.iter().enumerate(){
+            for arg in &self.args{
                 let arg_gl = arg.sl(cx)?;
                 args_gl.push(arg_gl);
             };

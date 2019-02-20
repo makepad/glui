@@ -1,56 +1,67 @@
 use std::mem;
 
 #[derive(Default,Clone)]
-pub struct GLTexture{
+pub struct Texture{
     pub texture_id: usize,
-    pub gl_texture: gl::types::GLuint
+    pub dirty:bool,
+    pub image: Vec<u32>,
+    pub width: usize,
+    pub height:usize,
+    pub gl_texture: Option<gl::types::GLuint>
+}
+
+impl Texture{
+    pub fn resize(&mut self, width:usize, height:usize){
+        self.width = width;
+        self.height = height;
+        self.image.resize((width * height) as usize, 0);
+        self.dirty = true;
+    }
+
+    pub fn upload_to_device(&mut self){
+
+        unsafe{
+            let mut tex_handle;
+            match self.gl_texture{
+                None=>{
+                    tex_handle = mem::uninitialized();
+                    gl::GenTextures(1, &mut tex_handle);
+                    self.gl_texture = Some(tex_handle);
+                }
+                Some(gl_texture)=>{
+                    tex_handle = gl_texture
+                }
+            }
+            gl::BindTexture(gl::TEXTURE_2D, tex_handle);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, self.width as i32, self.height as i32, 0, gl::RGBA, gl::UNSIGNED_BYTE, self.image.as_ptr() as *const _);
+            gl::BindTexture(gl::TEXTURE_2D, 0);
+        }
+
+        self.dirty = false;
+    }
 }
 
 #[derive(Clone, Default)]
 pub struct CxTextures{
-    pub textures:Vec<GLTexture>
-}
-
-pub enum Filter{
-    Nearest,
-    Linear,
-    Mipmap
+    pub textures:Vec<Texture>
 }
 
 impl CxTextures{
-    pub fn get(&self, id:usize)->&GLTexture{
+    pub fn get(&self, id:usize)->&Texture{
         &self.textures[id]
     }
 
-    pub fn add_2d_static(&mut self, filter:Filter, v:&Vec<u32>, width:usize, height:usize)->usize{
+    pub fn add_empty(&mut self)->&mut Texture{
         //let id = self.textures.len();
-        let mut tex_handle;
-        unsafe{
-            tex_handle = mem::uninitialized();
-            gl::GenTextures(1, &mut tex_handle);
-            gl::BindTexture(gl::TEXTURE_2D, tex_handle);
-            if let Filter::Nearest = filter{
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-            }
-            else if let Filter::Linear = filter{
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            }
-            else{
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR as i32);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR_MIPMAP_LINEAR as i32);
-            }
-            gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_BYTE, v.as_ptr() as *const _);
-            gl::BindTexture(gl::TEXTURE_2D, 0);
-        }
         let id = self.textures.len();
         self.textures.push(
-            GLTexture{
+            Texture{
                 texture_id:id,
-                gl_texture:tex_handle
+                ..Default::default()
             }
         );
-        id
+        &mut self.textures[id]
     }
 }
